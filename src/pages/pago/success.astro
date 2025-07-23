@@ -71,8 +71,11 @@
   </div>
 
   <script>
-    // Mostrar fecha actual
-    document.getElementById('fecha-pago').textContent = new Date().toLocaleDateString('es-ES');
+    // Mostrar fecha actual con verificación de null
+    const fechaElement = document.getElementById('fecha-pago');
+    if (fechaElement) {
+      fechaElement.textContent = new Date().toLocaleDateString('es-ES');
+    }
     
     // Obtener parámetros de la URL (si MercadoPago los envía)
     const urlParams = new URLSearchParams(window.location.search);
@@ -82,6 +85,17 @@
     if (paymentId) {
       console.log('Payment ID:', paymentId);
       console.log('Status:', status);
+      
+      // Mostrar información del pago en la UI
+      const paymentInfo = document.querySelector('.bg-gray-50.rounded-lg');
+      if (paymentInfo && paymentId) {
+        paymentInfo.innerHTML += `
+          <div class="flex justify-between border-t pt-2 mt-2">
+            <span>ID de Pago:</span>
+            <span class="font-medium text-xs">${paymentId.substring(0, 20)}...</span>
+          </div>
+        `;
+      }
     }
   </script>
 </body>

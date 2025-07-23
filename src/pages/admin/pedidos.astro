@@ -3,8 +3,8 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { supabase } from '../../lib/supabaseClient';
 
 // 📦 Obtener todos los pedidos con información del producto
-let pedidos = [];
-let error = null;
+let pedidos: any[] = [];
+let error: string | null = null;
 
 try {
   const { data, error: pedidosError } = await supabase
@@ -25,7 +25,7 @@ try {
   }
 
   pedidos = data || [];
-} catch (e) {
+} catch (e: any) {
   console.error('Error cargando pedidos:', e);
   error = e instanceof Error ? e.message : 'Error desconocido';
 }
