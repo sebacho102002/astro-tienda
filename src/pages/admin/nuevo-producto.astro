@@ -1,0 +1,440 @@
+---
+export const prerender = false;
+
+import { supabase } from "../../lib/supabaseClient";
+
+console.log("🚨 SUPABASE_URL:", import.meta.env.PUBLIC_SUPABASE_URL);
+console.log("🚨 SUPABASE_KEY:", import.meta.env.PUBLIC_SUPABASE_KEY?.substring(0, 10)); // solo primeros 10 caracteres
+
+let success = false;
+let error = null;
+
+if (Astro.request.method === "POST") {
+	try {
+		console.log("🔍 Procesando formulario...");
+		const formData = await Astro.request.formData();
+
+		const title = formData.get("title")?.toString() || "";
+		const description = formData.get("description")?.toString() || "";
+		const price = parseFloat(formData.get("price")?.toString() || "0");
+		const stock = parseInt(formData.get("stock")?.toString() || "0");
+		const category = formData.get("category")?.toString() || "";
+		const sku = formData.get("sku")?.toString() || "";
+		const weight = parseFloat(formData.get("weight")?.toString() || "0");
+		const dimensions = formData.get("dimensions")?.toString() || "";
+		
+		// Parsear imágenes
+		const imageUrls = [];
+		for (let i = 1; i <= 5; i++) {
+			const imageUrl = formData.get(`image_${i}`)?.toString().trim();
+			if (imageUrl) {
+				imageUrls.push(imageUrl);
+			}
+		}
+		
+		// Parsear configuración de pagos
+		const paymentEnabled = formData.get("payment_enabled") === "on";
+		const paymentConfig = {
+			enabled: paymentEnabled,
+			stripe: {
+				enabled: paymentEnabled && formData.get("stripe_enabled") === "on",
+				price_id: formData.get("stripe_price_id")?.toString() || ""
+			},
+			paypal: {
+				enabled: paymentEnabled && formData.get("paypal_enabled") === "on",
+				item_id: formData.get("paypal_item_id")?.toString() || ""
+			},
+			mercadopago: {
+				enabled: paymentEnabled && formData.get("mercadopago_enabled") === "on",
+				preference_id: formData.get("mercadopago_preference_id")?.toString() || ""
+			}
+		};
+
+		console.log("📝 Datos del formulario:", { 
+			title, description, price, stock, category, sku, weight, dimensions, images: imageUrls.length, paymentConfig 
+		});
+
+		// Verificaciones
+		if (!title || !description || price <= 0 || stock < 0) {
+			console.error("❌ Campos requeridos faltantes o inválidos");
+			error = "Por favor completa todos los campos requeridos con valores válidos";
+		} else if (!import.meta.env.PUBLIC_SUPABASE_URL || !import.meta.env.PUBLIC_SUPABASE_KEY) {
+			console.error("❌ Variables de entorno no configuradas");
+			error = "Variables de entorno de Supabase no configuradas";
+		} else {
+			console.log("🔍 Intentando insertar en Supabase...");
+			
+			const { data, error: insertError } = await supabase
+				.from("productos")
+				.insert({
+					title,
+					description,
+					price,
+					stock,
+					category,
+					sku,
+					weight,
+					dimensions,
+					images: imageUrls,
+					payment_config: paymentConfig
+				})
+				.select();
+
+			if (insertError) {
+				console.error("Error Supabase:", insertError);
+				error = `Error de base de datos: ${insertError.message}`;
+			} else {
+				console.log("✅ Producto insertado:", data);
+				success = true;
+			}
+		}
+	} catch (err) {
+		console.error("Error procesando formData:", err);
+		error = `Error al procesar el formulario: ${err instanceof Error ? err.message : 'Error desconocido'}`;
+	}
+}
+---
+
+<html lang="es">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Nuevo producto - Admin</title>
+		<script src="https://cdn.tailwindcss.com"></script>
+	</head>
+	<body class="bg-gray-100 text-gray-800">
+		<div class="flex min-h-screen">
+			<!-- Sidebar -->
+			<aside class="w-64 bg-purple-700 text-white p-6">
+				<h1 class="text-3xl font-bold mb-8">TuMarca Admin</h1>
+				<nav class="space-y-4">
+					<a href="/admin/productos" class="block hover:bg-purple-600 p-2 rounded">📦 Productos</a>
+					<a href="/admin/nuevo-producto" class="block bg-purple-600 p-2 rounded">➕ Nuevo Producto</a>
+					<a href="/admin/pedidos" class="block hover:bg-purple-600 p-2 rounded">🧾 Pedidos</a>
+					<a href="/" class="block hover:bg-purple-600 p-2 rounded">🔄 Ir al sitio</a>
+				</nav>
+			</aside>
+
+			<!-- Contenido principal -->
+			<main class="flex-1 p-8">
+				<div class="max-w-4xl mx-auto">
+					<h2 class="text-3xl font-bold text-purple-700 mb-8">Agregar nuevo producto</h2>
+
+					{error && (
+						<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+							<strong class="font-bold">❌ Error:</strong> {error}
+						</div>
+					)}
+
+					{success ? (
+						<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+							<div class="flex items-center">
+								<span class="text-2xl mr-2">✅</span>
+								<div>
+									<strong class="font-bold">¡Producto creado exitosamente!</strong>
+									<p class="mt-2">El producto se ha agregado correctamente a la base de datos.</p>
+									<div class="mt-4 space-x-4">
+										<a href="/admin/productos" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+											Ver todos los productos
+										</a>
+										<a href="/admin/nuevo-producto" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+											Agregar otro producto
+										</a>
+									</div>
+								</div>
+							</div>
+						</div>
+					) : (
+						<form method="POST" enctype="application/x-www-form-urlencoded" class="space-y-8">
+							<!-- Información básica -->
+							<div class="bg-white p-6 rounded-lg shadow">
+								<h3 class="text-xl font-semibold mb-4 text-gray-800">📝 Información Básica</h3>
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+									<div>
+										<label for="title" class="block font-semibold mb-2">Nombre del producto *</label>
+										<input 
+											type="text" 
+											name="title" 
+											id="title" 
+											required 
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+											placeholder="Ej: Gorra deportiva premium"
+										/>
+									</div>
+
+									<div>
+										<label for="sku" class="block font-semibold mb-2">SKU</label>
+										<input 
+											type="text" 
+											name="sku" 
+											id="sku" 
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+											placeholder="Ej: GOR-001"
+										/>
+									</div>
+
+									<div>
+										<label for="category" class="block font-semibold mb-2">Categoría</label>
+										<select 
+											name="category" 
+											id="category" 
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+										>
+											<option value="">Seleccionar categoría</option>
+											<option value="gorras">Gorras</option>
+											<option value="camisetas">Camisetas</option>
+											<option value="hoodies">Hoodies</option>
+											<option value="accesorios">Accesorios</option>
+											<option value="otros">Otros</option>
+										</select>
+									</div>
+
+									<div>
+										<label for="price" class="block font-semibold mb-2">Precio *</label>
+										<div class="relative">
+											<span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+											<input 
+												type="number" 
+												name="price" 
+												id="price" 
+												required 
+												step="0.01" 
+												min="0"
+												class="w-full border border-gray-300 p-3 pl-8 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+												placeholder="0.00"
+											/>
+										</div>
+									</div>
+
+									<div>
+										<label for="stock" class="block font-semibold mb-2">Inventario *</label>
+										<input 
+											type="number" 
+											name="stock" 
+											id="stock" 
+											required 
+											min="0"
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+											placeholder="0"
+										/>
+									</div>
+
+									<div>
+										<label for="weight" class="block font-semibold mb-2">Peso (kg)</label>
+										<input 
+											type="number" 
+											name="weight" 
+											id="weight" 
+											step="0.01" 
+											min="0"
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+											placeholder="0.00"
+										/>
+									</div>
+								</div>
+
+								<div class="mt-6">
+									<label for="description" class="block font-semibold mb-2">Descripción *</label>
+									<textarea 
+										name="description" 
+										id="description" 
+										rows="4" 
+										required 
+										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+										placeholder="Describe las características, materiales, beneficios del producto..."
+									></textarea>
+								</div>
+
+								<div class="mt-6">
+									<label for="dimensions" class="block font-semibold mb-2">Dimensiones</label>
+									<input 
+										type="text" 
+										name="dimensions" 
+										id="dimensions" 
+										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+										placeholder="Ej: 25cm x 15cm x 10cm"
+									/>
+								</div>
+							</div>
+
+							<!-- Imágenes -->
+							<div class="bg-white p-6 rounded-lg shadow">
+								<h3 class="text-xl font-semibold mb-4 text-gray-800">🖼️ Imágenes del Producto</h3>
+								<div>
+									<label for="images" class="block font-semibold mb-2">URLs de imágenes</label>
+									<textarea 
+										name="images" 
+										id="images" 
+										rows="4" 
+										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+										placeholder="Ingresa las URLs de las imágenes separadas por comas:
+https://ejemplo.com/imagen1.jpg,
+https://ejemplo.com/imagen2.jpg,
+https://ejemplo.com/imagen3.jpg"
+									></textarea>
+									<p class="text-sm text-gray-600 mt-2">
+										💡 <strong>Tip:</strong> Puedes usar servicios como <a href="https://imgur.com" target="_blank" class="text-purple-600 hover:underline">Imgur</a> o 
+										<a href="https://cloudinary.com" target="_blank" class="text-purple-600 hover:underline">Cloudinary</a> para subir tus imágenes gratis.
+									</p>
+								</div>
+
+								<!-- Preview de imágenes -->
+								<div id="image-preview" class="mt-4 grid-cols-2 md:grid-cols-4 gap-4 hidden">
+									<!-- Las imágenes se mostrarán aquí -->
+								</div>
+							</div>
+
+							<!-- Configuración de pagos -->
+							<div class="bg-white p-6 rounded-lg shadow">
+								<h3 class="text-xl font-semibold mb-4 text-gray-800">💳 Configuración de Pagos</h3>
+								
+								<div class="mb-6">
+									<label class="flex items-center space-x-3">
+										<input 
+											type="checkbox" 
+											name="paymentEnabled" 
+											id="paymentEnabled"
+											class="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+										/>
+										<span class="font-semibold">Habilitar pagos online para este producto</span>
+									</label>
+									<p class="text-sm text-gray-600 mt-2">Si está deshabilitado, solo se podrá comprar por WhatsApp</p>
+								</div>
+
+								<div id="payment-config" class="space-y-6 hidden">
+									<div>
+										<label for="paymentProvider" class="block font-semibold mb-2">Proveedor de pagos</label>
+										<select 
+											name="paymentProvider" 
+											id="paymentProvider" 
+											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+										>
+											<option value="stripe">Stripe</option>
+											<option value="paypal">PayPal</option>
+											<option value="mercadopago">Mercado Pago</option>
+										</select>
+									</div>
+
+									<!-- Configuración Stripe -->
+									<div id="stripe-config" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+										<div>
+											<label for="stripeProductId" class="block font-semibold mb-2">Stripe Product ID</label>
+											<input 
+												type="text" 
+												name="stripeProductId" 
+												id="stripeProductId" 
+												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+												placeholder="prod_xxxxxxxxxx"
+											/>
+										</div>
+										<div>
+											<label for="stripePriceId" class="block font-semibold mb-2">Stripe Price ID</label>
+											<input 
+												type="text" 
+												name="stripePriceId" 
+												id="stripePriceId" 
+												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+												placeholder="price_xxxxxxxxxx"
+											/>
+										</div>
+									</div>
+
+									<!-- Configuración PayPal -->
+									<div id="paypal-config" class="hidden">
+										<div>
+											<label for="paypalProductId" class="block font-semibold mb-2">PayPal Product ID</label>
+											<input 
+												type="text" 
+												name="paypalProductId" 
+												id="paypalProductId" 
+												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+												placeholder="PROD-xxxxxxxxxx"
+											/>
+										</div>
+									</div>
+
+									<div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+										<h4 class="font-semibold text-blue-800 mb-2">📘 Cómo configurar los pagos:</h4>
+										<ul class="text-sm text-blue-700 space-y-1">
+											<li>• <strong>Stripe:</strong> Crea un producto en tu dashboard de Stripe y copia los IDs</li>
+											<li>• <strong>PayPal:</strong> Configura el producto en PayPal Business y obtén el Product ID</li>
+											<li>• <strong>Mercado Pago:</strong> Usa la API de preferencias para generar enlaces de pago</li>
+										</ul>
+									</div>
+								</div>
+							</div>
+
+							<!-- Botones de acción -->
+							<div class="flex justify-end space-x-4">
+								<a 
+									href="/admin/productos" 
+									class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition duration-300"
+								>
+									Cancelar
+								</a>
+								<button 
+									type="submit" 
+									class="bg-purple-700 hover:bg-purple-800 text-white px-8 py-3 rounded-lg transition duration-300 font-semibold"
+								>
+									💾 Crear Producto
+								</button>
+							</div>
+						</form>
+					)}
+				</div>
+			</main>
+		</div>
+
+		<script is:inline>
+			// Preview de imágenes
+			document.getElementById('images').addEventListener('input', function(e) {
+				const urls = e.target.value.split(',').map(url => url.trim()).filter(url => url);
+				const preview = document.getElementById('image-preview');
+				
+				if (urls.length > 0) {
+					preview.classList.remove('hidden');
+					preview.innerHTML = '';
+					
+					urls.forEach(url => {
+						const div = document.createElement('div');
+						div.className = 'relative group';
+						div.innerHTML = `
+							<img src="${url}" alt="Preview" class="w-full h-32 object-cover rounded-lg border border-gray-300" 
+								 onerror="this.parentElement.innerHTML='<div class=\\'w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500\\'>❌ URL inválida</div>'" />
+						`;
+						preview.appendChild(div);
+					});
+				} else {
+					preview.classList.add('hidden');
+				}
+			});
+
+			// Configuración de pagos
+			document.getElementById('paymentEnabled').addEventListener('change', function(e) {
+				const config = document.getElementById('payment-config');
+				if (e.target.checked) {
+					config.classList.remove('hidden');
+				} else {
+					config.classList.add('hidden');
+				}
+			});
+
+			// Cambio de proveedor de pagos
+			document.getElementById('paymentProvider').addEventListener('change', function(e) {
+				const stripeConfig = document.getElementById('stripe-config');
+				const paypalConfig = document.getElementById('paypal-config');
+				
+				// Ocultar todas las configuraciones
+				stripeConfig.classList.add('hidden');
+				paypalConfig.classList.add('hidden');
+				
+				// Mostrar la configuración correspondiente
+				if (e.target.value === 'stripe') {
+					stripeConfig.classList.remove('hidden');
+				} else if (e.target.value === 'paypal') {
+					paypalConfig.classList.remove('hidden');
+				}
+			});
+		</script>
+	</body>
+</html>

@@ -1,0 +1,28 @@
+---
+import "../styles/global.css";
+import Navbar from "../components/Navbar.astro";
+import Hero from "../components/Hero.astro";
+import ProductList from "../components/ProductList.astro";
+import Testimonials from "../components/Testimonials.astro";
+import ContactForm from "../components/ContactForm.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Landing Astro Comercio</title>
+  </head>
+  <body>
+    <Navbar />
+
+    <main class="pt-20">
+      <section id="inicio"><Hero /></section>
+      <ProductList />
+      <Testimonials />
+      <ContactForm />
+    </main>
+
+    <Footer />
+  </body>
+</html>

@@ -1,0 +1,51 @@
+---
+import { supabase } from "../lib/supabaseClient.js";
+
+const { data: productos, error } = await supabase
+  .from("productos")
+  .select("*")
+  .order("created_at", { ascending: false });
+
+console.log("🔍 Productos cargados:", productos?.length || 0);
+if (error) {
+  console.error("❌ Error cargando productos:", error);
+}
+---
+
+{error && <p class="text-red-500 text-center">Error al cargar productos.</p>}
+
+<section id="productos" class="py-16 bg-gray-100">
+  <div class="container mx-auto px-6">
+    <h2 class="text-3xl font-bold text-center mb-12 text-gray-800">Nuestros Productos</h2>
+    
+    {productos && productos.length > 0 ? (
+      <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {productos.map((p) => (
+          <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-300">
+            <img 
+              src={p.images?.[0] || "/placeholder.jpg"} 
+              alt={p.title} 
+              class="h-48 w-full object-cover rounded-lg mb-4" 
+            />
+            <h3 class="text-xl font-semibold mb-2 text-gray-800">{p.title}</h3>
+            <p class="text-purple-600 font-bold text-xl mb-2">${p.price}</p>
+            <p class="text-gray-600 text-sm mb-4 line-clamp-2">{p.description}</p>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-500">Stock: {p.stock}</span>
+              <a 
+                href={`/producto/${p.id}`} 
+                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition duration-300"
+              >
+                Ver más
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div class="text-center py-12">
+        <p class="text-gray-600 text-lg">No hay productos disponibles en este momento.</p>
+      </div>
+    )}
+  </div>
+</section>

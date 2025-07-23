@@ -1,0 +1,316 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { supabase } from '../../lib/supabaseClient';
+
+// 📦 Obtener todos los pedidos con información del producto
+let pedidos = [];
+let error = null;
+
+try {
+  const { data, error: pedidosError } = await supabase
+    .from('pedidos')
+    .select(`
+      *,
+      productos:producto_id (
+        title,
+        sku,
+        price,
+        images
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (pedidosError) {
+    throw pedidosError;
+  }
+
+  pedidos = data || [];
+} catch (e) {
+  console.error('Error cargando pedidos:', e);
+  error = e instanceof Error ? e.message : 'Error desconocido';
+}
+
+// Función para obtener el color del estado
+function getEstadoColor(estado: string) {
+  switch (estado) {
+    case 'pendiente': return 'bg-yellow-100 text-yellow-800';
+    case 'pagado': return 'bg-green-100 text-green-800';
+    case 'enviado': return 'bg-blue-100 text-blue-800';
+    case 'entregado': return 'bg-purple-100 text-purple-800';
+    case 'cancelado': return 'bg-red-100 text-red-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+}
+
+// Función para formatear precio
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+---
+
+<DashboardLayout title="Gestión de Pedidos">
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">📦 Pedidos</h1>
+        <p class="text-gray-600">Administra todos los pedidos y pagos</p>
+      </div>
+      
+      <!-- Stats rápidas -->
+      <div class="grid grid-cols-4 gap-4">
+        <div class="bg-yellow-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-yellow-700">
+            {pedidos.filter(p => p.estado === 'pendiente').length}
+          </div>
+          <div class="text-xs text-yellow-600">Pendientes</div>
+        </div>
+        <div class="bg-green-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-green-700">
+            {pedidos.filter(p => p.estado === 'pagado').length}
+          </div>
+          <div class="text-xs text-green-600">Pagados</div>
+        </div>
+        <div class="bg-blue-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-blue-700">
+            {pedidos.filter(p => p.estado === 'enviado').length}
+          </div>
+          <div class="text-xs text-blue-600">Enviados</div>
+        </div>
+        <div class="bg-purple-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-purple-700">
+            {pedidos.filter(p => p.estado === 'entregado').length}
+          </div>
+          <div class="text-xs text-purple-600">Entregados</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error handling -->
+    {error && (
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <h3 class="text-red-800 font-semibold">Error cargando pedidos</h3>
+        <p class="text-red-700 text-sm">{error}</p>
+      </div>
+    )}
+
+    <!-- Lista de pedidos -->
+    {!error && (
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Lista de Pedidos ({pedidos.length})
+          </h2>
+        </div>
+
+        {pedidos.length === 0 ? (
+          <div class="p-8 text-center text-gray-500">
+            <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              📦
+            </div>
+            <p>No hay pedidos registrados</p>
+            <p class="text-sm mt-2">Los pedidos aparecerán aquí cuando los clientes realicen compras</p>
+          </div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pedido
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cliente
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {pedidos.map((pedido) => (
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        {pedido.metodo_pago}
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {pedido.cliente_nombre}
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        {pedido.cliente_email}
+                      </div>
+                      {pedido.cliente_telefono && (
+                        <div class="text-sm text-gray-500">
+                          📞 {pedido.cliente_telefono}
+                        </div>
+                      )}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        {pedido.productos?.images?.[0] && (
+                          <img 
+                            class="h-10 w-10 rounded object-cover mr-3" 
+                            src={pedido.productos.images[0]} 
+                            alt={pedido.productos?.title}
+                          />
+                        )}
+                        <div>
+                          <div class="text-sm font-medium text-gray-900">
+                            {pedido.productos?.title || 'Producto eliminado'}
+                          </div>
+                          <div class="text-sm text-gray-500">
+                            SKU: {pedido.productos?.sku || 'N/A'} • Qty: {pedido.cantidad}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {formatPrice(pedido.precio_total)}
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        {formatPrice(pedido.precio_unitario)} × {pedido.cantidad}
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(pedido.estado)}`}>
+                        {pedido.estado}
+                      </span>
+                      {pedido.payment_status && (
+                        <div class="text-xs text-gray-500 mt-1">
+                          Pay: {pedido.payment_status}
+                        </div>
+                      )}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(pedido.created_at).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button 
+                        class="text-blue-600 hover:text-blue-900"
+                        onclick={`verDetallesPedido('${pedido.id}')`}
+                      >
+                        Ver
+                      </button>
+                      <button 
+                        class="text-green-600 hover:text-green-900"
+                        onclick={`actualizarEstado('${pedido.id}', '${pedido.estado}')`}
+                      >
+                        Actualizar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+
+  <!-- Modal para actualizar estado -->
+  <div id="modal-estado" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <h3 class="text-lg font-semibold mb-4">Actualizar Estado del Pedido</h3>
+      <select id="nuevo-estado" class="w-full p-2 border border-gray-300 rounded-lg mb-4">
+        <option value="pendiente">Pendiente</option>
+        <option value="pagado">Pagado</option>
+        <option value="enviado">Enviado</option>
+        <option value="entregado">Entregado</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+      <div class="flex space-x-3">
+        <button 
+          onclick="cerrarModal()"
+          class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+        >
+          Cancelar
+        </button>
+        <button 
+          onclick="confirmarActualizacion()"
+          class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
+        >
+          Actualizar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let pedidoIdActual = '';
+    
+    function verDetallesPedido(pedidoId) {
+      // Implementar modal de detalles o redirigir a página de detalles
+      console.log('Ver detalles del pedido:', pedidoId);
+      alert('Funcionalidad de detalles en desarrollo');
+    }
+    
+    function actualizarEstado(pedidoId, estadoActual) {
+      pedidoIdActual = pedidoId;
+      const modal = document.getElementById('modal-estado');
+      const select = document.getElementById('nuevo-estado');
+      
+      if (modal && select) {
+        select.value = estadoActual;
+        modal.classList.remove('hidden');
+      }
+    }
+    
+    function cerrarModal() {
+      const modal = document.getElementById('modal-estado');
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+    }
+    
+    async function confirmarActualizacion() {
+      const nuevoEstado = (document.getElementById('nuevo-estado') as HTMLSelectElement)?.value;
+      
+      if (!nuevoEstado || !pedidoIdActual) return;
+      
+      try {
+        // Aquí implementarías la API para actualizar el estado
+        console.log('Actualizando pedido:', pedidoIdActual, 'a estado:', nuevoEstado);
+        
+        // Por ahora solo simulamos
+        alert(`Pedido actualizado a: ${nuevoEstado}`);
+        cerrarModal();
+        
+        // En producción, recargarías los datos o actualizarías la UI
+        // window.location.reload();
+        
+      } catch (error) {
+        console.error('Error actualizando pedido:', error);
+        alert('Error al actualizar el pedido');
+      }
+    }
+  </script>
+</DashboardLayout>

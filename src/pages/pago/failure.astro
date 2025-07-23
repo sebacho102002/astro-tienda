@@ -1,0 +1,84 @@
+---
+// Página de pago fallido
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago Fallido</title>
+  <link rel="stylesheet" href="/src/styles/global.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+      <!-- Ícono de error -->
+      <div class="w-16 h-16 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
+        <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </div>
+
+      <!-- Mensaje principal -->
+      <h1 class="text-2xl font-bold text-gray-900 mb-4">Pago No Completado ❌</h1>
+      
+      <div class="text-gray-600 mb-6 space-y-2">
+        <p class="text-lg">El pago no pudo ser procesado.</p>
+        <p class="text-sm">Puedes intentar nuevamente o usar otro método de pago.</p>
+      </div>
+
+      <!-- Posibles causas -->
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-red-900 mb-3">Posibles causas:</h3>
+        <ul class="text-sm text-red-700 text-left space-y-1">
+          <li>• Fondos insuficientes</li>
+          <li>• Datos de tarjeta incorrectos</li>
+          <li>• Tarjeta vencida o bloqueada</li>
+          <li>• Error de conexión</li>
+        </ul>
+      </div>
+
+      <!-- Botones de acción -->
+      <div class="space-y-3">
+        <button 
+          onclick="window.history.back()"
+          class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
+          Intentar nuevamente
+        </button>
+        
+        <button 
+          onclick="window.location.href='/carrito'"
+          class="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+        >
+          Volver al carrito
+        </button>
+        
+        <button 
+          onclick="window.location.href='/'"
+          class="w-full bg-gray-100 text-gray-600 py-2 px-6 rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          Ir al inicio
+        </button>
+      </div>
+
+      <!-- Ayuda -->
+      <div class="mt-8 text-xs text-gray-500 border-t pt-4">
+        <p>¿Necesitas ayuda? <a href="#" class="text-blue-600 hover:underline">Contacta soporte</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Obtener parámetros de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('payment_id');
+    const status = urlParams.get('status');
+    
+    if (paymentId) {
+      console.log('Payment ID:', paymentId);
+      console.log('Status:', status);
+    }
+  </script>
+</body>
+</html>

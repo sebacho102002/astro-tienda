@@ -1,0 +1,209 @@
+---
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Carrito de compras - TuMarca</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50 text-gray-900">
+    <!-- Header simple -->
+    <header class="bg-white shadow">
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
+          <nav class="space-x-4">
+            <a href="/" class="text-gray-700 hover:text-purple-600">Inicio</a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+      <h1 class="text-4xl font-bold mb-10 text-center">Tu carrito</h1>
+
+      <div id="cart-container" class="space-y-4 max-w-2xl mx-auto"></div>
+
+      <div id="empty-cart" class="text-center py-12 hidden">
+        <p class="text-gray-600 text-lg mb-6">Tu carrito está vacío.</p>
+        <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded transition">
+          Continuar comprando
+        </a>
+      </div>
+
+      <div id="summary" class="mt-10 text-center hidden max-w-md mx-auto">
+        <div class="bg-white p-6 rounded-lg shadow">
+          <p class="text-2xl font-semibold mb-6">Total: $<span id="cart-total">0</span></p>
+          <div class="space-y-4">
+            <button 
+              id="clear-cart"
+              class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition"
+            >
+              Vaciar carrito
+            </button>
+            <a 
+              id="whatsapp-link" 
+              href="#" 
+              target="_blank" 
+              class="block w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded transition text-center"
+            >
+              📱 Enviar pedido por WhatsApp
+            </a>
+            <a 
+              href="/pago" 
+              class="block w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded transition text-center"
+            >
+              💳 Pagar online
+            </a>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script is:inline>
+      // Variables globales
+      let cartContainer, totalElement, summary, emptyCart, whatsappLink, clearCartBtn;
+
+      // Inicializar elementos DOM
+      function initElements() {
+        cartContainer = document.getElementById("cart-container");
+        totalElement = document.getElementById("cart-total");
+        summary = document.getElementById("summary");
+        emptyCart = document.getElementById("empty-cart");
+        whatsappLink = document.getElementById("whatsapp-link");
+        clearCartBtn = document.getElementById("clear-cart");
+      }
+
+      function renderCart() {
+        if (!cartContainer || !totalElement || !summary || !emptyCart) return;
+        
+        cartContainer.innerHTML = "";
+        const cartData = localStorage.getItem("cart");
+        let cart = [];
+        
+        if (cartData) {
+          try {
+            cart = JSON.parse(cartData);
+          } catch (e) {
+            cart = [];
+          }
+        }
+
+        if (cart.length === 0) {
+          summary.classList.add("hidden");
+          emptyCart.classList.remove("hidden");
+          return;
+        }
+
+        emptyCart.classList.add("hidden");
+        let total = 0;
+        let mensaje = "*🛒 Pedido desde la tienda online:*\n\n";
+
+        for (let i = 0; i < cart.length; i++) {
+          const item = cart[i];
+          const subtotal = item.price * item.quantity;
+          total += subtotal;
+
+          mensaje += "• " + item.title + "\n  Cantidad: " + item.quantity + "\n  Precio: $" + subtotal.toFixed(2) + "\n\n";
+
+          const card = document.createElement("div");
+          card.className = "bg-white p-4 rounded-lg shadow flex items-center gap-4";
+
+          const imageUrl = (item.images && item.images.length > 0) ? item.images[0] : '/placeholder.jpg';
+          
+          card.innerHTML = 
+            '<img src="' + imageUrl + '" alt="' + item.title + '" class="w-20 h-20 object-cover rounded" onerror="this.src=\'/placeholder.jpg\'" />' +
+            '<div class="flex-1">' +
+              '<h3 class="text-lg font-semibold">' + item.title + '</h3>' +
+              '<p class="text-gray-600">$' + item.price + ' c/u</p>' +
+              '<div class="flex items-center mt-2">' +
+                '<button onclick="updateQuantity(' + i + ', -1)" class="bg-gray-200 px-2 py-1 rounded text-sm hover:bg-gray-300">-</button>' +
+                '<span class="mx-3 font-semibold">' + item.quantity + '</span>' +
+                '<button onclick="updateQuantity(' + i + ', 1)" class="bg-gray-200 px-2 py-1 rounded text-sm hover:bg-gray-300">+</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="text-right">' +
+              '<p class="font-bold">$' + subtotal.toFixed(2) + '</p>' +
+              '<button onclick="removeItem(' + i + ')" class="text-red-500 hover:underline text-sm mt-1">Eliminar</button>' +
+            '</div>';
+
+          cartContainer.appendChild(card);
+        }
+
+        totalElement.textContent = total.toFixed(2);
+        summary.classList.remove("hidden");
+
+        // Configurar enlace de WhatsApp
+        const numeroWpp = "573053947290";
+        const mensajeFinal = encodeURIComponent(mensaje + "*💰 Total: $" + total.toFixed(2) + "*\n\n¿Confirmas el pedido?");
+        if (whatsappLink) {
+          whatsappLink.href = "https://wa.me/" + numeroWpp + "?text=" + mensajeFinal;
+        }
+      }
+
+      // Funciones globales para los onclick
+      function updateQuantity(index, change) {
+        const cartData = localStorage.getItem("cart");
+        let cart = [];
+        
+        if (cartData) {
+          try {
+            cart = JSON.parse(cartData);
+          } catch (e) {
+            cart = [];
+          }
+        }
+        
+        if (cart[index]) {
+          cart[index].quantity = Math.max(1, cart[index].quantity + change);
+          localStorage.setItem("cart", JSON.stringify(cart));
+          renderCart();
+        }
+      }
+
+      function removeItem(index) {
+        const cartData = localStorage.getItem("cart");
+        let cart = [];
+        
+        if (cartData) {
+          try {
+            cart = JSON.parse(cartData);
+          } catch (e) {
+            cart = [];
+          }
+        }
+        
+        if (cart[index]) {
+          cart.splice(index, 1);
+          localStorage.setItem("cart", JSON.stringify(cart));
+          renderCart();
+        }
+      }
+
+      function clearCart() {
+        if (confirm('¿Estás seguro de que quieres vaciar el carrito?')) {
+          localStorage.removeItem("cart");
+          renderCart();
+        }
+      }
+
+      // Hacer funciones globales
+      window.updateQuantity = updateQuantity;
+      window.removeItem = removeItem;
+      window.clearCart = clearCart;
+
+      // Inicializar cuando el DOM esté listo
+      document.addEventListener('DOMContentLoaded', function() {
+        initElements();
+        renderCart();
+        
+        // Event listener para vaciar carrito
+        if (clearCartBtn) {
+          clearCartBtn.addEventListener('click', clearCart);
+        }
+      });
+    </script>
+  </body>
+</html>

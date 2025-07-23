@@ -1,0 +1,334 @@
+---
+export const prerender = false;
+
+import { supabase } from "../../lib/supabaseClient";
+
+const { id } = Astro.params;
+
+// Obtener el producto desde Supabase
+const { data: product, error } = await supabase
+  .from("productos")
+  .select("*")
+  .eq("id", id)
+  .single();
+
+if (error || !product) {
+  return Astro.redirect("/404");
+}
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{product.title} - TuMarca</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <!-- Header simple -->
+    <header class="bg-white shadow">
+      <div class="container mx-auto px-6 py-4">
+        <div class="flex items-center justify-between">
+          <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
+          <nav class="space-x-4">
+            <a href="/" class="text-gray-700 hover:text-purple-600">Inicio</a>
+            <a href="/carrito" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">🛒 Carrito</a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <!-- Producto -->
+    <main class="container mx-auto px-6 py-12">
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto">
+        <div class="md:flex">
+          <!-- Imagen del producto -->
+          <div class="md:flex-shrink-0 md:w-1/2">
+            <img 
+              src={product.images?.[0] || "/placeholder.jpg"} 
+              alt={product.title}
+              class="h-64 md:h-full w-full object-cover"
+            />
+          </div>
+          
+          <!-- Información del producto -->
+          <div class="p-8 md:w-1/2">
+            <h1 class="text-3xl font-bold text-gray-900 mb-4">{product.title}</h1>
+            
+            <div class="mb-4">
+              <span class="text-3xl font-bold text-purple-600">${product.price}</span>
+            </div>
+            
+            <p class="text-gray-600 mb-6">{product.description}</p>
+            
+            <div class="mb-6">
+              <span class="text-sm text-gray-500">Disponible: {product.stock} unidades</span>
+            </div>
+
+            {product.category && (
+              <div class="mb-6">
+                <span class="inline-block bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
+                  {product.category}
+                </span>
+              </div>
+            )}
+            
+            <!-- Controles de cantidad y botón agregar -->
+            <div class="flex items-center space-x-4 mb-6">
+              <div class="flex items-center border rounded">
+                <button 
+                  id="decrease-qty" 
+                  class="px-3 py-2 text-gray-600 hover:bg-gray-100"
+                  onclick="changeQuantity(-1)"
+                >-</button>
+                <input 
+                  type="number" 
+                  id="quantity" 
+                  value="1" 
+                  min="1" 
+                  max={product.stock}
+                  class="w-16 text-center py-2 border-l border-r"
+                />
+                <button 
+                  id="increase-qty" 
+                  class="px-3 py-2 text-gray-600 hover:bg-gray-100"
+                  onclick="changeQuantity(1)"
+                >+</button>
+              </div>
+            </div>
+            
+            <button 
+              id="add-to-cart"
+              class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 mb-4"
+              onclick="addToCart()"
+            >
+              🛒 Agregar al Carrito
+            </button>
+
+            <!-- Botones de Pago Online -->
+            {product.payment_config?.enabled && (
+              <div class="border-t pt-4 mt-4">
+                <h3 class="text-lg font-semibold mb-3 text-gray-800">💳 Comprar Ahora</h3>
+                <div class="space-y-3">
+                  
+                  {/* MercadoPago */}
+                  {product.payment_config.mercadopago?.enabled && (
+                    <button 
+                      onclick="buyWithMercadoPago()"
+                      class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
+                    >
+                      <span class="mr-2">🔵</span> Comprar con MercadoPago
+                    </button>
+                  )}
+
+                  {/* Stripe */}
+                  {product.payment_config.stripe?.enabled && (
+                    <button 
+                      onclick="buyWithStripe()"
+                      class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
+                    >
+                      <span class="mr-2">💳</span> Comprar con Stripe
+                    </button>
+                  )}
+
+                  {/* PayPal */}
+                  {product.payment_config.paypal?.enabled && (
+                    <button 
+                      onclick="buyWithPayPal()"
+                      class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
+                    >
+                      <span class="mr-2">🟡</span> Comprar con PayPal
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="text/javascript" define:vars={{ productData: product }}>
+      // Los datos del producto se pasan desde el servidor
+      let quantity = 1;
+
+      function changeQuantity(change) {
+        const qtyInput = document.getElementById('quantity');
+        if (qtyInput) {
+          const newQty = Math.max(1, Math.min(productData.stock, quantity + change));
+          quantity = newQty;
+          qtyInput.value = quantity;
+        }
+      }
+
+      function addToCart() {
+        // Obtener carrito actual
+        let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+        
+        // Verificar si el producto ya está en el carrito
+        const existingItemIndex = cart.findIndex(function(item) { 
+          return item.id === productData.id; 
+        });
+        
+        if (existingItemIndex > -1) {
+          // Si ya existe, aumentar la cantidad
+          cart[existingItemIndex].quantity += quantity;
+        } else {
+          // Si no existe, agregar nuevo item
+          cart.push({
+            id: productData.id,
+            title: productData.title,
+            price: productData.price,
+            description: productData.description,
+            images: productData.images,
+            stock: productData.stock,
+            quantity: quantity
+          });
+        }
+        
+        // Guardar carrito actualizado
+        localStorage.setItem("cart", JSON.stringify(cart));
+        
+        // Feedback al usuario
+        const button = document.getElementById('add-to-cart');
+        if (button) {
+          const originalText = button.textContent;
+          button.textContent = '¡Agregado!';
+          button.classList.add('bg-green-600');
+          button.classList.remove('bg-purple-600');
+          
+          setTimeout(function() {
+            button.textContent = originalText;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-purple-600');
+          }, 2000);
+        }
+      }
+
+      // 💳 Funciones de Pago Online
+      async function buyWithMercadoPago() {
+        try {
+          const button = event.target;
+          const originalText = button.textContent;
+          button.textContent = 'Procesando...';
+          button.disabled = true;
+
+          const response = await fetch('/api/mercadopago/create-preference', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productId: productData.id,
+              title: productData.title,
+              price: productData.price,
+              quantity: quantity
+            })
+          });
+
+          const data = await response.json();
+          
+          if (data.init_point) {
+            // Pago real - redirigir a MercadoPago
+            window.location.href = data.init_point;
+          } else if (data.message && data.message.includes('demostración')) {
+            // Modo de demostración
+            alert(`🔵 MercadoPago - Modo Demo\n\n${data.info}\n\nRequerimientos:\n${data.requirements.join('\n')}`);
+          } else {
+            throw new Error(data.error || 'Error al crear preferencia de pago');
+          }
+        } catch (error) {
+          console.error('Error con MercadoPago:', error);
+          alert('Error al procesar pago con MercadoPago: ' + error.message);
+        } finally {
+          // Restaurar botón
+          const button = event.target;
+          button.textContent = originalText;
+          button.disabled = false;
+        }
+      }
+
+      async function buyWithStripe() {
+        try {
+          const button = event.target;
+          const originalText = button.textContent;
+          button.textContent = 'Procesando...';
+          button.disabled = true;
+
+          const response = await fetch('/api/stripe/create-checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productId: productData.id,
+              priceId: productData.payment_config.stripe.price_id,
+              quantity: quantity
+            })
+          });
+
+          const data = await response.json();
+          
+          if (data.url && !data.message?.includes('demostración')) {
+            // Pago real - redirigir a Stripe
+            window.location.href = data.url;
+          } else if (data.message && data.message.includes('demostración')) {
+            // Modo de demostración
+            alert(`💳 Stripe - Modo Demo\n\n${data.info}\n\nRequerimientos:\n${data.requirements.join('\n')}`);
+          } else {
+            throw new Error(data.error || 'Error al crear sesión de pago');
+          }
+        } catch (error) {
+          console.error('Error con Stripe:', error);
+          alert('Error al procesar pago con Stripe: ' + error.message);
+        } finally {
+          // Restaurar botón
+          const button = event.target;
+          button.textContent = originalText;
+          button.disabled = false;
+        }
+      }
+
+      async function buyWithPayPal() {
+        try {
+          const button = event.target;
+          const originalText = button.textContent;
+          button.textContent = 'Procesando...';
+          button.disabled = true;
+
+          // Por ahora mostrar mensaje de que está en desarrollo
+          alert('PayPal estará disponible próximamente. Por favor usa MercadoPago o Stripe.');
+          
+          // Restaurar botón
+          button.textContent = originalText;
+          button.disabled = false;
+        } catch (error) {
+          console.error('Error con PayPal:', error);
+          alert('Error al procesar pago con PayPal');
+          
+          // Restaurar botón
+          const button = event.target;
+          button.textContent = originalText;
+          button.disabled = false;
+        }
+      }
+
+      // Exponer funciones globalmente para los onclick
+      window.changeQuantity = changeQuantity;
+      window.addToCart = addToCart;
+      window.buyWithMercadoPago = buyWithMercadoPago;
+      window.buyWithStripe = buyWithStripe;
+      window.buyWithPayPal = buyWithPayPal;
+
+      // Sincronizar input de cantidad
+      document.addEventListener('DOMContentLoaded', function() {
+        const quantityInput = document.getElementById('quantity');
+        if (quantityInput) {
+          quantityInput.addEventListener('input', function(e) {
+            const target = e.target;
+            if (target && 'value' in target) {
+              quantity = Math.max(1, Math.min(productData.stock, parseInt(target.value) || 1));
+              target.value = quantity;
+            }
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

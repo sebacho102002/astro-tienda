@@ -1,0 +1,32 @@
+---
+import TestimonialCard from './TestimonialCard.astro';
+
+const testimonials = [
+  {
+    name: "Laura G.",
+    comment: "La calidad es excelente y el envío fue muy rápido. ¡Recomiendo mucho esta tienda!",
+    rating: 5,
+  },
+  {
+    name: "Carlos M.",
+    comment: "Muy buena atención al cliente. Tuve una duda y la resolvieron de inmediato.",
+    rating: 4,
+  },
+  {
+    name: "Andrés P.",
+    comment: "El producto llegó tal como se muestra en la página. Muy satisfecho.",
+    rating: 5,
+  },
+];
+---
+
+<section class="bg-gray-50 py-20">
+  <div class="container mx-auto px-6">
+    <h2 class="text-4xl font-bold text-center mb-10">Lo que dicen nuestros clientes</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {testimonials.map((t) => (
+        <TestimonialCard {...t} />
+      ))}
+    </div>
+  </div>
+</section>

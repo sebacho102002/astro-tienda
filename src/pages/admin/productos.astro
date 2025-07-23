@@ -1,0 +1,204 @@
+---
+export const prerender = false;
+
+import DashboardLayout from "../../layouts/DashboardLayout.astro";
+import { supabase } from "../../lib/supabaseClient.js";
+
+const { data: productos, error } = await supabase
+  .from("productos")
+  .select("*")
+  .order("created_at", { ascending: false });
+
+console.log("🔍 Productos cargados:", productos?.length || 0);
+if (error) {
+  console.error("❌ Error cargando productos:", error);
+}
+---
+
+<DashboardLayout title="Gestión de Productos">
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold text-purple-700">Gestión de Productos</h1>
+    <a href="/admin/nuevo-producto" class="inline-block">
+      <button class="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-6 py-3 rounded-lg shadow transition duration-300">
+        ➕ Agregar Producto
+      </button>
+    </a>
+  </div>
+
+  {error && (
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+      <strong class="font-bold">❌ Error:</strong> No se pudieron cargar los productos.
+      <p class="text-sm mt-1">{error.message}</p>
+    </div>
+  )}
+
+  {productos && productos.length > 0 ? (
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <!-- Estadísticas rápidas -->
+      <div class="bg-purple-50 p-6 border-b">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div class="text-center">
+            <div class="text-2xl font-bold text-purple-700">{productos.length}</div>
+            <div class="text-sm text-gray-600">Total Productos</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-green-600">
+              {productos.filter(p => p.stock > 0).length}
+            </div>
+            <div class="text-sm text-gray-600">En Stock</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-red-600">
+              {productos.filter(p => p.stock === 0).length}
+            </div>
+            <div class="text-sm text-gray-600">Sin Stock</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-blue-600">
+              {productos.filter(p => p.payment_config?.enabled).length}
+            </div>
+            <div class="text-sm text-gray-600">Con Pago Online</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla de productos -->
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Producto
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Precio
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Stock
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Categoría
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Pago Online
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {productos.map((producto) => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <img 
+                      src={producto.images?.[0] || '/placeholder.jpg'} 
+                      alt={producto.title}
+                      class="w-12 h-12 object-cover rounded-lg mr-4"
+                      onerror="this.src='/placeholder.jpg'"
+                    />
+                    <div>
+                      <div class="text-sm font-medium text-gray-900">
+                        {producto.title}
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        SKU: {producto.sku || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">
+                    ${producto.price}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    producto.stock > 10 ? 'bg-green-100 text-green-800' :
+                    producto.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {producto.stock} unidades
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {producto.category || '-'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    producto.payment_config?.enabled 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {producto.payment_config?.enabled ? '✅ Habilitado' : '❌ Deshabilitado'}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  <a 
+                    href={`/producto/${producto.id}`}
+                    class="text-blue-600 hover:text-blue-900"
+                    target="_blank"
+                  >
+                    👁️ Ver
+                  </a>
+                  <a 
+                    href={`/admin/editar-producto/${producto.id}`}
+                    class="text-purple-600 hover:text-purple-900"
+                  >
+                    ✏️ Editar
+                  </a>
+                  <button
+                    onclick={`deleteProduct('${producto.id}', '${producto.title}')`}
+                    class="text-red-600 hover:text-red-900"
+                  >
+                    🗑️ Eliminar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : (
+    <div class="text-center py-12">
+      <div class="text-6xl mb-4">📦</div>
+      <h3 class="text-xl font-semibold text-gray-800 mb-2">No hay productos</h3>
+      <p class="text-gray-600 mb-6">Comienza agregando tu primer producto</p>
+      <a href="/admin/nuevo-producto" class="inline-block">
+        <button class="bg-purple-700 hover:bg-purple-800 text-white font-semibold px-6 py-3 rounded-lg shadow transition duration-300">
+          ➕ Agregar Primer Producto
+        </button>
+      </a>
+    </div>
+  )}
+
+  <script is:inline>
+    async function deleteProduct(id, title) {
+      if (!confirm(`¿Estás seguro de que quieres eliminar "${title}"?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/productos/delete', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id })
+        });
+
+        if (response.ok) {
+          alert('Producto eliminado correctamente');
+          location.reload();
+        } else {
+          alert('Error al eliminar el producto');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error al eliminar el producto');
+      }
+    }
+  </script>
+</DashboardLayout>

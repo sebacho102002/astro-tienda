@@ -1,0 +1,29 @@
+---
+---
+
+<nav class="bg-white shadow-md fixed top-0 left-0 right-0 z-50">
+  <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+    <a href="/" class="flex items-center gap-2">
+      <img src="/logo.png" alt="Logo TuMarca" class="h-10 w-auto" />
+      <span class="text-xl font-bold text-purple-600 tracking-wide">TuMarca</span>
+    </a>
+
+    <ul class="hidden md:flex space-x-6 items-center text-gray-700 font-medium">
+      <li><a href="#inicio" class="hover:text-purple-600 transition">Inicio</a></li>
+      <li><a href="#productos" class="hover:text-purple-600 transition">Productos</a></li>
+      <li><a href="#contacto" class="hover:text-purple-600 transition">Contacto</a></li>
+      <li>
+        <a href="/carrito" class="relative hover:text-purple-600 transition">
+          🛒
+          <span id="cart-count" class="absolute -top-2 -right-3 bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<script type="module">
+  const cart = JSON.parse(localStorage.getItem("cart")) || [];
+  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  document.getElementById("cart-count").textContent = totalItems;
+</script>

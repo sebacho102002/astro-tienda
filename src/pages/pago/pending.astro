@@ -1,0 +1,108 @@
+---
+// Página de pago pendiente
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago Pendiente</title>
+  <link rel="stylesheet" href="/src/styles/global.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+      <!-- Ícono de pendiente -->
+      <div class="w-16 h-16 mx-auto mb-6 bg-yellow-100 rounded-full flex items-center justify-center">
+        <svg class="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </div>
+
+      <!-- Mensaje principal -->
+      <h1 class="text-2xl font-bold text-gray-900 mb-4">Pago en Proceso ⏳</h1>
+      
+      <div class="text-gray-600 mb-6 space-y-2">
+        <p class="text-lg">Tu pago está siendo procesado.</p>
+        <p class="text-sm">Recibirás una confirmación cuando se complete el proceso.</p>
+      </div>
+
+      <!-- Información del proceso -->
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-yellow-900 mb-3">¿Qué sigue?</h3>
+        <ul class="text-sm text-yellow-700 text-left space-y-2">
+          <li>🔄 El pago está siendo verificado</li>
+          <li>📧 Te enviaremos un email de confirmación</li>
+          <li>⏰ El proceso puede tomar hasta 24 horas</li>
+          <li>💬 Puedes consultar el estado por WhatsApp</li>
+        </ul>
+      </div>
+
+      <!-- Estado del pago -->
+      <div class="bg-gray-50 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-gray-900 mb-3">Estado actual</h3>
+        <div class="text-sm text-gray-600 space-y-1">
+          <div class="flex justify-between">
+            <span>Estado:</span>
+            <span class="font-medium text-yellow-600">Pendiente</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Método de pago:</span>
+            <span class="font-medium">MercadoPago</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Fecha:</span>
+            <span class="font-medium" id="fecha-pago"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botones de acción -->
+      <div class="space-y-3">
+        <button 
+          onclick="window.location.reload()"
+          class="w-full bg-yellow-600 text-white py-3 px-6 rounded-lg hover:bg-yellow-700 transition-colors font-medium"
+        >
+          Actualizar estado
+        </button>
+        
+        <button 
+          onclick="window.location.href='/'"
+          class="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+        >
+          Volver al inicio
+        </button>
+      </div>
+
+      <!-- Información de contacto -->
+      <div class="mt-8 text-xs text-gray-500 border-t pt-4">
+        <p>¿Preguntas? <a href="#" class="text-blue-600 hover:underline">Contacta soporte</a></p>
+        <p class="mt-1">Te mantendremos informado sobre el progreso de tu pago.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Mostrar fecha actual con null check
+    const fechaElement = document.getElementById('fecha-pago');
+    if (fechaElement) {
+      fechaElement.textContent = new Date().toLocaleDateString('es-ES');
+    }
+    
+    // Obtener parámetros de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('payment_id');
+    const status = urlParams.get('status');
+    
+    if (paymentId) {
+      console.log('Payment ID:', paymentId);
+      console.log('Status:', status);
+    }
+
+    // Auto-refresh cada 30 segundos para verificar el estado
+    setTimeout(() => {
+      window.location.reload();
+    }, 30000);
+  </script>
+</body>
+</html>

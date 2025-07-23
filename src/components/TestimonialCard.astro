@@ -1,0 +1,11 @@
+---
+const { name, comment, rating } = Astro.props;
+---
+
+<div class="bg-white rounded-lg shadow-md p-6 text-center hover:shadow-xl transition">
+  <div class="text-yellow-400 mb-2">
+    {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
+  </div>
+  <p class="text-gray-600 italic mb-4">"{comment}"</p>
+  <h4 class="text-lg font-semibold">{name}</h4>
+</div>

@@ -1,0 +1,88 @@
+---
+// Página de éxito de pago
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>¡Pago Exitoso!</title>
+  <link rel="stylesheet" href="/src/styles/global.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+      <!-- Ícono de éxito -->
+      <div class="w-16 h-16 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
+        <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+
+      <!-- Mensaje principal -->
+      <h1 class="text-2xl font-bold text-gray-900 mb-4">¡Pago Exitoso! ✅</h1>
+      
+      <div class="text-gray-600 mb-6 space-y-2">
+        <p class="text-lg">Tu pago ha sido procesado correctamente.</p>
+        <p class="text-sm">Recibirás un email de confirmación en breve.</p>
+      </div>
+
+      <!-- Información del pago -->
+      <div class="bg-gray-50 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-gray-900 mb-3">Detalles del pago</h3>
+        <div class="text-sm text-gray-600 space-y-1">
+          <div class="flex justify-between">
+            <span>Estado:</span>
+            <span class="font-medium text-green-600">Aprobado</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Método de pago:</span>
+            <span class="font-medium">MercadoPago</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Fecha:</span>
+            <span class="font-medium" id="fecha-pago"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botones de acción -->
+      <div class="space-y-3">
+        <button 
+          onclick="window.location.href='/'"
+          class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
+          Volver al inicio
+        </button>
+        
+        <button 
+          onclick="window.location.href='/carrito'"
+          class="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+        >
+          Seguir comprando
+        </button>
+      </div>
+
+      <!-- Información adicional -->
+      <div class="mt-8 text-xs text-gray-500 border-t pt-4">
+        <p>Si tienes alguna pregunta sobre tu pedido, contacta nuestro soporte.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Mostrar fecha actual
+    document.getElementById('fecha-pago').textContent = new Date().toLocaleDateString('es-ES');
+    
+    // Obtener parámetros de la URL (si MercadoPago los envía)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('payment_id');
+    const status = urlParams.get('status');
+    
+    if (paymentId) {
+      console.log('Payment ID:', paymentId);
+      console.log('Status:', status);
+    }
+  </script>
+</body>
+</html>

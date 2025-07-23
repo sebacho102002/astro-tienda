@@ -1,0 +1,29 @@
+---
+const { title = "Panel", children } = Astro.props;
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{title}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body class="bg-gray-100 font-sans text-gray-900">
+    <div class="flex h-screen">
+      <!-- Sidebar -->
+      <aside class="w-64 bg-purple-700 text-white p-6 space-y-6">
+        <h2 class="text-2xl font-bold">TuMarca</h2>
+        <nav class="space-y-2">
+          <a href="/admin/productos" class="block hover:bg-purple-600 p-2 rounded">📦 Productos</a>
+          <a href="/admin/pedidos" class="block hover:bg-purple-600 p-2 rounded">🧾 Pedidos</a>
+          <a href="/" class="block hover:bg-purple-600 p-2 rounded">↩️ Ir al sitio</a>
+        </nav>
+      </aside>
+
+      <!-- Main content -->
+      <main class="flex-1 p-8 overflow-y-auto">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>
