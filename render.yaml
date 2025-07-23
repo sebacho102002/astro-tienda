@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: astro-tienda
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node ./dist/server/entry.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: NPM_CONFIG_PRODUCTION
+        value: false
