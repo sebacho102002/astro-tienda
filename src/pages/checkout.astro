@@ -1,0 +1,413 @@
+---
+export const prerender = false;
+
+import { supabase } from '../lib/supabaseClient';
+
+let error: string | null = null;
+let success: boolean = false;
+let orderNumber: string | null = null;
+
+// Función para formatear precios
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    // Información del cliente
+    const customerName = formData.get('customer_name')?.toString() || '';
+    const customerEmail = formData.get('customer_email')?.toString() || '';
+    const customerPhone = formData.get('customer_phone')?.toString() || '';
+    
+    // Información de envío
+    const shippingAddress = formData.get('shipping_address')?.toString() || '';
+    const city = formData.get('city')?.toString() || '';
+    const postalCode = formData.get('postal_code')?.toString() || '';
+    
+    // Información del carrito (viene como JSON)
+    const cartData = formData.get('cart_data')?.toString() || '[]';
+    
+    let cart: any[] = [];
+    try {
+      cart = JSON.parse(cartData);
+    } catch (e) {
+      throw new Error('Datos del carrito inválidos');
+    }
+
+    // Validaciones
+    if (!customerName || !customerEmail || !customerPhone) {
+      throw new Error('Por favor completa todos los campos obligatorios');
+    }
+
+    if (!shippingAddress || !city) {
+      throw new Error('Por favor completa la información de envío');
+    }
+
+    if (cart.length === 0) {
+      throw new Error('Tu carrito está vacío');
+    }
+
+    // Crear pedidos en la base de datos
+    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Crear un único pedido con todos los productos como JSON
+    const { data, error: insertError } = await supabase
+      .from('pedidos')
+      .insert({
+        cliente_nombre: customerName,
+        cliente_email: customerEmail,
+        cliente_telefono: customerPhone,
+        cantidad: cart.reduce((sum, item) => sum + item.quantity, 0),
+        precio_unitario: 0,
+        precio_total: total,
+        estado: 'pendiente',
+        metodo_pago: 'checkout',
+        direccion_envio: shippingAddress,
+        codigo_postal: postalCode,
+        ciudad: city,
+        external_reference: `checkout_${Date.now()}`,
+        // Guardar los productos como nota en un campo de texto
+        notes: `Productos: ${cart.map(item => `${item.title} (x${item.quantity}) - ${formatPrice(item.price * item.quantity)}`).join(', ')}`
+      })
+      .select('numero_pedido')
+      .single();
+
+    if (insertError) {
+      console.error('Error detallado:', insertError);
+      throw new Error(`Error creando pedido: ${insertError.message}`);
+    }
+
+    if (data) {
+      orderNumber = data.numero_pedido;
+    }
+
+    success = true;
+
+  } catch (err) {
+    console.error('Error en checkout:', err);
+    error = err instanceof Error ? err.message : 'Error desconocido';
+  }
+}
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout - TuMarca</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="container mx-auto px-6 py-4">
+      <div class="flex items-center justify-between">
+        <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
+        <nav class="flex items-center space-x-6">
+          <a href="/carrito" class="text-gray-700 hover:text-purple-600">← Volver al carrito</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-6 py-12">
+    <div class="max-w-6xl mx-auto">
+
+      {success ? (
+        <!-- Pedido exitoso -->
+        <div class="max-w-2xl mx-auto text-center">
+          <div class="bg-white p-8 rounded-lg shadow-lg">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            
+            <h1 class="text-3xl font-bold text-gray-900 mb-4">¡Pedido recibido!</h1>
+            <p class="text-gray-600 mb-6">Tu pedido ha sido procesado correctamente. Nos pondremos en contacto contigo pronto.</p>
+            
+            {orderNumber && (
+              <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                <p class="font-semibold text-gray-900">Número de pedido: {orderNumber}</p>
+              </div>
+            )}
+
+            <div class="space-y-4">
+              <a href="/" class="block w-full bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors">
+                Volver al inicio
+              </a>
+              <a href="/admin/pedidos" class="block w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-lg hover:bg-gray-300 transition-colors">
+                Ver pedidos (Admin)
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- Formulario de checkout -->
+          <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Información de entrega</h1>
+
+            {error && (
+              <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+                <strong>Error:</strong> {error}
+              </div>
+            )}
+
+            <form method="POST" class="space-y-6">
+              <!-- Información del cliente -->
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Información personal</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label for="customer_name" class="block text-sm font-medium text-gray-700 mb-1">
+                      Nombre completo *
+                    </label>
+                    <input 
+                      type="text" 
+                      name="customer_name" 
+                      id="customer_name" 
+                      required
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Tu nombre completo"
+                    />
+                  </div>
+
+                  <div>
+                    <label for="customer_email" class="block text-sm font-medium text-gray-700 mb-1">
+                      Email *
+                    </label>
+                    <input 
+                      type="email" 
+                      name="customer_email" 
+                      id="customer_email" 
+                      required
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="tu@email.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label for="customer_phone" class="block text-sm font-medium text-gray-700 mb-1">
+                      Teléfono/WhatsApp *
+                    </label>
+                    <input 
+                      type="tel" 
+                      name="customer_phone" 
+                      id="customer_phone" 
+                      required
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="+57 300 123 4567"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Información de envío -->
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Información de envío</h3>
+                <div class="space-y-4">
+                  <div>
+                    <label for="shipping_address" class="block text-sm font-medium text-gray-700 mb-1">
+                      Dirección completa *
+                    </label>
+                    <textarea 
+                      name="shipping_address" 
+                      id="shipping_address" 
+                      required
+                      rows="3"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Calle, número, apartamento, barrio, referencias..."
+                    ></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label for="city" class="block text-sm font-medium text-gray-700 mb-1">
+                        Ciudad *
+                      </label>
+                      <input 
+                        type="text" 
+                        name="city" 
+                        id="city" 
+                        required
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Tu ciudad"
+                      />
+                    </div>
+
+                    <div>
+                      <label for="postal_code" class="block text-sm font-medium text-gray-700 mb-1">
+                        Código postal
+                      </label>
+                      <input 
+                        type="text" 
+                        name="postal_code" 
+                        id="postal_code"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="110111"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Campo oculto para datos del carrito -->
+              <input type="hidden" name="cart_data" id="cart_data" />
+
+              <!-- Botón de envío -->
+              <div class="border-t pt-6">
+                <button 
+                  type="submit" 
+                  id="submit-order"
+                  class="w-full bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Confirmar pedido
+                </button>
+                <p class="text-sm text-gray-500 mt-2 text-center">
+                  Al confirmar, nos contactaremos contigo para coordinar el pago y envío
+                </p>
+              </div>
+            </form>
+          </div>
+
+          <!-- Resumen del pedido -->
+          <div class="bg-white p-6 rounded-lg shadow-lg h-fit">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">Resumen del pedido</h2>
+            
+            <div id="order-summary" class="space-y-4">
+              <!-- Se llena con JavaScript -->
+            </div>
+
+            <div class="border-t pt-4 mt-6">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-600">Subtotal:</span>
+                <span id="order-subtotal" class="font-semibold">$0</span>
+              </div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-600">Envío:</span>
+                <span class="text-sm text-gray-500">A consultar</span>
+              </div>
+              <div class="border-t pt-2 flex justify-between items-center">
+                <span class="text-xl font-bold">Total:</span>
+                <span id="order-total" class="text-xl font-bold text-purple-600">$0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  </main>
+
+  <script define:vars={{}}>
+    // Formatear precio
+    function formatPrice(price) {
+      return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(price);
+    }
+
+    // Obtener carrito del localStorage
+    function getCart() {
+      try {
+        const cart = localStorage.getItem('cart');
+        return cart ? JSON.parse(cart) : [];
+      } catch (error) {
+        console.error('Error obteniendo carrito:', error);
+        return [];
+      }
+    }
+
+    // Renderizar resumen del pedido
+    function renderOrderSummary() {
+      const cart = getCart();
+      const summaryContainer = document.getElementById('order-summary');
+      const subtotalElement = document.getElementById('order-subtotal');
+      const totalElement = document.getElementById('order-total');
+      const cartDataInput = document.getElementById('cart_data');
+
+      if (cart.length === 0) {
+        if (summaryContainer) {
+          summaryContainer.innerHTML = '<p class="text-gray-500 text-center py-8">Tu carrito está vacío</p>';
+        }
+        // Deshabilitar botón de envío
+        const submitBtn = document.getElementById('submit-order');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Carrito vacío';
+        }
+        return;
+      }
+
+      // Llenar datos del carrito en el input hidden
+      if (cartDataInput) {
+        cartDataInput.value = JSON.stringify(cart);
+      }
+
+      // Renderizar items
+      if (summaryContainer) {
+        summaryContainer.innerHTML = cart.map(item => `
+          <div class="flex items-center space-x-3">
+            <div class="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+              ${item.image || (item.images && item.images[0]) ? 
+                `<img src="${item.image || item.images[0]}" alt="${item.title}" class="w-full h-full object-cover rounded-lg">` : 
+                '📷'
+              }
+            </div>
+            <div class="flex-1">
+              <h4 class="font-medium text-gray-900">${item.title}</h4>
+              <p class="text-sm text-gray-500">Cantidad: ${item.quantity}</p>
+            </div>
+            <div class="text-right">
+              <p class="font-semibold">${formatPrice(item.price * item.quantity)}</p>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Calcular y mostrar total
+      const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      if (subtotalElement) subtotalElement.textContent = formatPrice(total);
+      if (totalElement) totalElement.textContent = formatPrice(total);
+    }
+
+    // Inicializar cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', function() {
+      renderOrderSummary();
+
+      // Verificar si hay productos en el carrito
+      const cart = getCart();
+      if (cart.length === 0) {
+        console.warn('Checkout cargado sin productos en el carrito');
+      }
+
+      // Agregar validación al formulario
+      const form = document.querySelector('form');
+      if (form) {
+        form.addEventListener('submit', function(e) {
+          const cart = getCart();
+          if (cart.length === 0) {
+            e.preventDefault();
+            alert('Tu carrito está vacío. Agrega productos antes de continuar.');
+            return;
+          }
+        });
+      }
+    });
+
+    // Limpiar carrito después de pedido exitoso (si estamos en la página de éxito)
+    if (window.location.search.includes('success') || document.querySelector('[data-success]')) {
+      localStorage.removeItem('cart');
+    }
+  </script>
+</body>
+</html>

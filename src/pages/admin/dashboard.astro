@@ -1,0 +1,242 @@
+---
+export const prerender = false;
+
+import DashboardLayout from "../../layouts/DashboardLayout.astro";
+import StatCard from "../../components/StatCard.astro";
+import { supabase } from "../../lib/supabaseClient.js";
+
+// Obtener estadísticas completas
+const statsPromises = await Promise.all([
+  // Productos
+  supabase.from('productos').select('id, stock, price, created_at'),
+  // Pedidos
+  supabase.from('pedidos').select('id, status, precio_total, created_at, cliente_email'),
+  // Pedidos recientes (últimos 7 días)
+  supabase
+    .from('pedidos')
+    .select('*')
+    .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10)
+]);
+
+const [productosResult, pedidosResult, pedidosRecientesResult] = statsPromises;
+
+// Calcular estadísticas
+const productos = productosResult.data || [];
+const pedidos = pedidosResult.data || [];
+const pedidosRecientes = pedidosRecientesResult.data || [];
+
+const stats = {
+  totalProductos: productos.length,
+  productosEnStock: productos.filter(p => (p.stock || 0) > 0).length,
+  productosSinStock: productos.filter(p => (p.stock || 0) === 0).length,
+  valorInventario: productos.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0),
+  
+  totalPedidos: pedidos.length,
+  pedidosPendientes: pedidos.filter(p => ['pendiente', 'pagado', 'enviado'].includes(p.status)).length,
+  pedidosCompletados: pedidos.filter(p => p.status === 'entregado').length,
+  ingresosTotales: pedidos
+    .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
+    .reduce((sum, p) => sum + (p.precio_total || 0), 0),
+    
+  clientesUnicos: new Set(pedidos.map(p => p.cliente_email).filter(Boolean)).size,
+  pedidosHoy: pedidos.filter(p => {
+    const today = new Date().toDateString();
+    return new Date(p.created_at).toDateString() === today;
+  }).length,
+  
+  ventasSemana: pedidosRecientes
+    .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
+    .reduce((sum, p) => sum + (p.precio_total || 0), 0)
+};
+
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+---
+
+<DashboardLayout title="Dashboard - Resumen General">
+  <div class="space-y-8">
+    
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900">📊 Dashboard</h1>
+        <p class="text-gray-600">Resumen general de tu tienda online</p>
+      </div>
+      <div class="text-right">
+        <div class="text-sm text-gray-500">Última actualización</div>
+        <div class="text-sm font-medium">{new Date().toLocaleString('es-ES')}</div>
+      </div>
+    </div>
+
+    <!-- Estadísticas Principales -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <StatCard
+        title="Total Productos"
+        value={stats.totalProductos}
+        description={`${stats.productosEnStock} en stock, ${stats.productosSinStock} agotados`}
+        color="blue"
+        icon="📦"
+      />
+      
+      <StatCard
+        title="Pedidos Totales"
+        value={stats.totalPedidos}
+        description={`${stats.pedidosPendientes} pendientes, ${stats.pedidosCompletados} completados`}
+        color="green"
+        icon="🛒"
+      />
+      
+      <StatCard
+        title="Ingresos Totales"
+        value={formatPrice(stats.ingresosTotales)}
+        description="De pedidos pagados/enviados/entregados"
+        color="purple"
+        icon="💰"
+      />
+      
+      <StatCard
+        title="Clientes Únicos"
+        value={stats.clientesUnicos}
+        description={`${stats.pedidosHoy} pedidos hoy`}
+        color="yellow"
+        icon="👥"
+      />
+    </div>
+
+    <!-- Estadísticas Secundarias -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <StatCard
+        title="Valor del Inventario"
+        value={formatPrice(stats.valorInventario)}
+        description="Valor total del stock actual"
+        color="blue"
+        icon="🏪"
+      />
+      
+      <StatCard
+        title="Ventas Esta Semana"
+        value={formatPrice(stats.ventasSemana)}
+        description={`${pedidosRecientes.length} pedidos recientes`}
+        color="green"
+        icon="📈"
+      />
+      
+      <StatCard
+        title="Tasa de Conversión"
+        value={`${stats.totalPedidos > 0 ? Math.round((stats.pedidosCompletados / stats.totalPedidos) * 100) : 0}%`}
+        description="Pedidos completados vs totales"
+        color="purple"
+        icon="🎯"
+      />
+    </div>
+
+    <!-- Pedidos Recientes -->
+    <div class="bg-white rounded-lg shadow">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">📋 Pedidos Recientes (7 días)</h2>
+      </div>
+      
+      {pedidosRecientes.length > 0 ? (
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pedido</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              {pedidosRecientes.slice(0, 8).map((pedido: any) => (
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    #{pedido.id.slice(0, 8)}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900">
+                    {pedido.cliente_nombre || pedido.cliente_email}
+                  </td>
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    {formatPrice(pedido.precio_total || 0)}
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      pedido.status === 'entregado' ? 'bg-green-100 text-green-800' :
+                      pedido.status === 'enviado' ? 'bg-blue-100 text-blue-800' :
+                      pedido.status === 'pagado' ? 'bg-yellow-100 text-yellow-800' :
+                      pedido.status === 'pendiente' ? 'bg-gray-100 text-gray-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {pedido.status}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-500">
+                    {new Date(pedido.created_at).toLocaleDateString('es-ES', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div class="p-8 text-center text-gray-500">
+          <div class="text-4xl mb-4">📭</div>
+          <p>No hay pedidos recientes en los últimos 7 días</p>
+        </div>
+      )}
+    </div>
+
+    <!-- Acciones Rápidas -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">🚀 Acciones Rápidas</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <a href="/admin/nuevo-producto" 
+           class="flex items-center justify-center p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors group">
+          <div class="text-center">
+            <div class="text-2xl mb-2 group-hover:scale-110 transition-transform">➕</div>
+            <div class="text-sm font-medium text-purple-700">Agregar Producto</div>
+          </div>
+        </a>
+        
+        <a href="/admin/pedidos" 
+           class="flex items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors group">
+          <div class="text-center">
+            <div class="text-2xl mb-2 group-hover:scale-110 transition-transform">📦</div>
+            <div class="text-sm font-medium text-green-700">Ver Pedidos</div>
+          </div>
+        </a>
+        
+        <a href="/admin/productos" 
+           class="flex items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors group">
+          <div class="text-center">
+            <div class="text-2xl mb-2 group-hover:scale-110 transition-transform">🛒</div>
+            <div class="text-sm font-medium text-blue-700">Gestionar Productos</div>
+          </div>
+        </a>
+        
+        <a href="/" 
+           target="_blank"
+           class="flex items-center justify-center p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg border border-yellow-200 transition-colors group">
+          <div class="text-center">
+            <div class="text-2xl mb-2 group-hover:scale-110 transition-transform">🌐</div>
+            <div class="text-sm font-medium text-yellow-700">Ver Tienda</div>
+          </div>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</DashboardLayout>

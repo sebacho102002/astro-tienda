@@ -4,7 +4,7 @@ export const prerender = false;
 import { supabase } from "../../lib/supabaseClient";
 
 console.log("🚨 SUPABASE_URL:", import.meta.env.PUBLIC_SUPABASE_URL);
-console.log("🚨 SUPABASE_KEY:", import.meta.env.PUBLIC_SUPABASE_KEY?.substring(0, 10)); // solo primeros 10 caracteres
+console.log("🚨 SUPABASE_KEY:", import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.substring(0, 10)); // solo primeros 10 caracteres
 
 let success = false;
 let error = null;
@@ -66,7 +66,7 @@ if (Astro.request.method === "POST") {
 		if (!title || !description || price <= 0 || stock < 0) {
 			console.error("❌ Campos requeridos faltantes o inválidos");
 			error = "Por favor completa todos los campos requeridos con valores válidos";
-		} else if (!import.meta.env.PUBLIC_SUPABASE_URL || !import.meta.env.PUBLIC_SUPABASE_KEY) {
+		} else if (!import.meta.env.PUBLIC_SUPABASE_URL || !import.meta.env.PUBLIC_SUPABASE_ANON_KEY) {
 			console.error("❌ Variables de entorno no configuradas");
 			error = "Variables de entorno de Supabase no configuradas";
 		} else {

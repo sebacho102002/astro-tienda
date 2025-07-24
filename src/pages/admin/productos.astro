@@ -4,10 +4,29 @@ export const prerender = false;
 import DashboardLayout from "../../layouts/DashboardLayout.astro";
 import { supabase } from "../../lib/supabaseClient.js";
 
+// Obtener productos con información de pedidos asociados
 const { data: productos, error } = await supabase
   .from("productos")
-  .select("*")
+  .select(`
+    *,
+    pedidos:pedidos(count)
+  `)
   .order("created_at", { ascending: false });
+
+// Obtener estadísticas de pedidos por producto
+const { data: pedidosStats } = await supabase
+  .from("pedidos")
+  .select("producto_id")
+  .eq("status", "completed");
+
+// Crear mapa de pedidos por producto
+const pedidosMap = new Map();
+if (pedidosStats) {
+  pedidosStats.forEach(pedido => {
+    const count = pedidosMap.get(pedido.producto_id) || 0;
+    pedidosMap.set(pedido.producto_id, count + 1);
+  });
+}
 
 console.log("🔍 Productos cargados:", productos?.length || 0);
 if (error) {
@@ -55,9 +74,9 @@ if (error) {
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-blue-600">
-              {productos.filter(p => p.payment_config?.enabled).length}
+              {Array.from(pedidosMap.values()).reduce((sum, count) => sum + count, 0)}
             </div>
-            <div class="text-sm text-gray-600">Con Pago Online</div>
+            <div class="text-sm text-gray-600">Pedidos Completados</div>
           </div>
         </div>
       </div>
@@ -78,6 +97,9 @@ if (error) {
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Categoría
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Pedidos
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Pago Online
@@ -126,6 +148,14 @@ if (error) {
                   {producto.category || '-'}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-gray-900">
+                    <span class="font-medium">{pedidosMap.get(producto.id) || 0}</span> pedidos
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {pedidosMap.get(producto.id) > 0 ? 'Tiene dependencias' : 'Sin dependencias'}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
                   <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     producto.payment_config?.enabled 
                       ? 'bg-green-100 text-green-800' 
@@ -149,7 +179,7 @@ if (error) {
                     ✏️ Editar
                   </a>
                   <button
-                    onclick={`deleteProduct('${producto.id}', '${producto.title}')`}
+                    onclick={`deleteProduct('${producto.id}', '${producto.title}', event)`}
                     class="text-red-600 hover:text-red-900"
                   >
                     🗑️ Eliminar
@@ -175,12 +205,24 @@ if (error) {
   )}
 
   <script is:inline>
-    async function deleteProduct(id, title) {
-      if (!confirm(`¿Estás seguro de que quieres eliminar "${title}"?`)) {
+    async function deleteProduct(id, title, event) {
+      // Confirmar eliminación con información adicional
+      const confirmMessage = `¿Estás seguro de que quieres eliminar "${title}"?\n\n⚠️ IMPORTANTE:\n• Si este producto tiene pedidos asociados, no se podrá eliminar\n• Esta acción no se puede deshacer\n• Se eliminará permanentemente de la base de datos`;
+      
+      if (!confirm(confirmMessage)) {
         return;
       }
 
+      // Mostrar indicador de carga
+      const button = event.target;
+      const originalText = button.innerHTML;
+      button.innerHTML = '⏳ Eliminando...';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+
       try {
+        console.log('🗑️ Enviando solicitud de eliminación para producto:', id);
+        
         const response = await fetch('/api/productos/delete', {
           method: 'DELETE',
           headers: {
@@ -189,16 +231,50 @@ if (error) {
           body: JSON.stringify({ id })
         });
 
+        console.log('📡 Respuesta del servidor:', response.status);
+        const data = await response.json();
+
         if (response.ok) {
-          alert('Producto eliminado correctamente');
+          console.log('✅ Producto eliminado:', data);
+          
+          // Mostrar mensaje de éxito y recargar
+          alert(`✅ ${data.message}`);
           location.reload();
+          
+        } else if (response.status === 409) {
+          // Producto tiene dependencias
+          console.warn('⚠️ Producto tiene dependencias:', data);
+          
+          const dependencyMessage = `⚠️ No se puede eliminar "${title}"\n\n` +
+                                   `Motivo: ${data.error}\n\n` +
+                                   `💡 Para eliminar este producto:\n` +
+                                   `1. Ve a la sección "Pedidos"\n` +
+                                   `2. Elimina o modifica los pedidos que usan este producto\n` +
+                                   `3. Luego regresa aquí para eliminarlo`;
+          
+          alert(dependencyMessage);
+          
         } else {
-          alert('Error al eliminar el producto');
+          // Otros errores
+          console.error('❌ Error del servidor:', data);
+          alert(`❌ Error: ${data.error || 'No se pudo eliminar el producto'}\n\nDetalles: ${data.details || 'Error desconocido'}`);
         }
       } catch (error) {
-        console.error('Error:', error);
-        alert('Error al eliminar el producto');
+        console.error('❌ Error de red:', error);
+        alert('❌ Error de conexión\n\nNo se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.');
+      } finally {
+        // Restaurar botón
+        button.innerHTML = originalText;
+        button.disabled = false;
+        button.style.opacity = '1';
       }
     }
+  </script>
+</DashboardLayout>
+      }
+    }
+
+    // Hacer la función global
+    window.deleteProduct = deleteProduct;
   </script>
 </DashboardLayout>

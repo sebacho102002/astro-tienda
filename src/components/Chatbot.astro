@@ -1,0 +1,213 @@
+---
+// Componente de Chatbot para soporte al cliente
+---
+
+<div id="chatbot-container" class="fixed bottom-4 right-4 z-50">
+  <!-- Botón del chatbot -->
+  <button 
+    id="chatbot-toggle"
+    class="w-14 h-14 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110"
+  >
+    <span id="chatbot-icon">💬</span>
+  </button>
+
+  <!-- Ventana del chat -->
+  <div 
+    id="chatbot-window" 
+    class="hidden absolute bottom-16 right-0 w-80 h-96 bg-white rounded-lg shadow-xl border border-gray-200"
+  >
+    <!-- Header del chat -->
+    <div class="bg-purple-600 text-white p-4 rounded-t-lg">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+            🤖
+          </div>
+          <div>
+            <div class="font-medium">Asistente Virtual</div>
+            <div class="text-xs opacity-75">En línea</div>
+          </div>
+        </div>
+        <button id="chatbot-close" class="text-white hover:text-gray-200">✕</button>
+      </div>
+    </div>
+
+    <!-- Área de mensajes -->
+    <div id="chat-messages" class="flex-1 p-4 h-64 overflow-y-auto space-y-3">
+      <div class="flex items-start space-x-2">
+        <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-sm">🤖</div>
+        <div class="bg-gray-100 rounded-lg p-3 max-w-xs">
+          <p class="text-sm">¡Hola! 👋 Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Área de input -->
+    <div class="border-t border-gray-200 p-4">
+      <div class="flex space-x-2">
+        <input 
+          id="chat-input"
+          type="text" 
+          placeholder="Escribe tu pregunta..."
+          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <button 
+          id="chat-send"
+          class="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          ➤
+        </button>
+      </div>
+      
+      <!-- Botones de respuestas rápidas -->
+      <div id="quick-responses" class="mt-3 flex flex-wrap gap-2">
+        <button class="quick-btn px-3 py-1 bg-gray-100 text-sm rounded-full hover:bg-gray-200 transition-colors">
+          ¿Cómo comprar?
+        </button>
+        <button class="quick-btn px-3 py-1 bg-gray-100 text-sm rounded-full hover:bg-gray-200 transition-colors">
+          Envíos
+        </button>
+        <button class="quick-btn px-3 py-1 bg-gray-100 text-sm rounded-full hover:bg-gray-200 transition-colors">
+          Devoluciones
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  class Chatbot {
+    isOpen: boolean;
+    responses: Record<string, string>;
+
+    constructor() {
+      this.isOpen = false;
+      this.responses = {
+        '¿cómo comprar?': '🛒 Para comprar: 1) Navega por nuestros productos, 2) Agrega al carrito, 3) Ve al checkout y completa tu información. ¡Es muy fácil!',
+        'envíos': '📦 Realizamos envíos a toda Colombia. Tiempo estimado: 2-5 días hábiles. Envío gratis en compras superiores a $100.000.',
+        'devoluciones': '↩️ Tienes 30 días para devolver tu producto. Debe estar en perfecto estado y con embalaje original.',
+        'productos': '📋 Tenemos una amplia variedad de productos. Puedes filtrar por categoría o usar el buscador.',
+        'pago': '💳 Aceptamos tarjetas de crédito, débito, PSE y pagos en efectivo a través de nuestros aliados.',
+        'contacto': '📞 Puedes contactarnos por WhatsApp, email o este chat. Estamos aquí para ayudarte.',
+        'horarios': '⏰ Atendemos de lunes a viernes de 8:00 AM a 6:00 PM, y sábados de 9:00 AM a 2:00 PM.',
+        'default': '🤔 Interesante pregunta. Te sugiero contactar a nuestro equipo de soporte para una respuesta más detallada. ¿Hay algo más en lo que pueda ayudarte?'
+      };
+      
+      this.init();
+    }
+
+    init() {
+      const toggle = document.getElementById('chatbot-toggle');
+      const close = document.getElementById('chatbot-close');
+      const send = document.getElementById('chat-send');
+      const input = document.getElementById('chat-input');
+      const quickBtns = document.querySelectorAll('.quick-btn');
+
+      toggle?.addEventListener('click', () => this.toggleChat());
+      close?.addEventListener('click', () => this.closeChat());
+      send?.addEventListener('click', () => this.sendMessage());
+      input?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.sendMessage();
+      });
+
+      quickBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const message = btn.textContent?.toLowerCase() || '';
+          this.addUserMessage(btn.textContent || '');
+          this.respondToMessage(message);
+        });
+      });
+    }
+
+    toggleChat() {
+      const window = document.getElementById('chatbot-window');
+      const icon = document.getElementById('chatbot-icon');
+      
+      if (this.isOpen) {
+        this.closeChat();
+      } else {
+        window?.classList.remove('hidden');
+        if (icon) icon.textContent = '✕';
+        this.isOpen = true;
+      }
+    }
+
+    closeChat() {
+      const window = document.getElementById('chatbot-window');
+      const icon = document.getElementById('chatbot-icon');
+      
+      window?.classList.add('hidden');
+      if (icon) icon.textContent = '💬';
+      this.isOpen = false;
+    }
+
+    sendMessage() {
+      const input = document.getElementById('chat-input') as HTMLInputElement;
+      const message = input?.value.trim();
+      
+      if (message) {
+        this.addUserMessage(message);
+        input.value = '';
+        
+        // Simular tiempo de respuesta
+        setTimeout(() => {
+          this.respondToMessage(message.toLowerCase());
+        }, 500);
+      }
+    }
+
+    addUserMessage(message: string) {
+      const messagesContainer = document.getElementById('chat-messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'flex items-start space-x-2 justify-end';
+      messageDiv.innerHTML = `
+        <div class="bg-purple-600 text-white rounded-lg p-3 max-w-xs">
+          <p class="text-sm">${message}</p>
+        </div>
+        <div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm">👤</div>
+      `;
+      messagesContainer?.appendChild(messageDiv);
+      this.scrollToBottom();
+    }
+
+    addBotMessage(message: string) {
+      const messagesContainer = document.getElementById('chat-messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'flex items-start space-x-2';
+      messageDiv.innerHTML = `
+        <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-sm">🤖</div>
+        <div class="bg-gray-100 rounded-lg p-3 max-w-xs">
+          <p class="text-sm">${message}</p>
+        </div>
+      `;
+      messagesContainer?.appendChild(messageDiv);
+      this.scrollToBottom();
+    }
+
+    respondToMessage(message: string) {
+      let response = this.responses.default;
+      
+      // Buscar respuesta apropiada
+      for (const [key, value] of Object.entries(this.responses)) {
+        if (key !== 'default' && message.includes(key)) {
+          response = value;
+          break;
+        }
+      }
+      
+      this.addBotMessage(response);
+    }
+
+    scrollToBottom() {
+      const messagesContainer = document.getElementById('chat-messages');
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+  }
+
+  // Inicializar chatbot cuando el DOM esté listo
+  document.addEventListener('DOMContentLoaded', () => {
+    new Chatbot();
+  });
+</script>

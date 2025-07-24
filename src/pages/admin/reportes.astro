@@ -1,0 +1,378 @@
+---
+export const prerender = false;
+
+import DashboardLayout from "../../layouts/DashboardLayout.astro";
+import StatCard from "../../components/StatCard.astro";
+import { supabase } from "../../lib/supabaseClient.js";
+
+// Definir rangos de fechas
+const hoy = new Date();
+const hace7dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+const hace30dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+const inicioAño = new Date(hoy.getFullYear(), 0, 1);
+
+// Obtener datos para reportes
+const [
+  ventasHoy,
+  ventasSemana,
+  ventasMes,
+  ventasAño,
+  pedidosPorEstado,
+  productosMasVendidos,
+  clientesFrecuentes
+] = await Promise.all([
+  // Ventas de hoy
+  supabase
+    .from('pedidos')
+    .select('precio_total, status')
+    .gte('created_at', hoy.toISOString().split('T')[0])
+    .in('status', ['pagado', 'enviado', 'entregado']),
+    
+  // Ventas últimos 7 días
+  supabase
+    .from('pedidos')
+    .select('precio_total, status, created_at')
+    .gte('created_at', hace7dias.toISOString())
+    .in('status', ['pagado', 'enviado', 'entregado']),
+    
+  // Ventas del mes
+  supabase
+    .from('pedidos')
+    .select('precio_total, status')
+    .gte('created_at', inicioMes.toISOString())
+    .in('status', ['pagado', 'enviado', 'entregado']),
+    
+  // Ventas del año
+  supabase
+    .from('pedidos')
+    .select('precio_total, status')
+    .gte('created_at', inicioAño.toISOString())
+    .in('status', ['pagado', 'enviado', 'entregado']),
+    
+  // Pedidos por estado
+  supabase
+    .from('pedidos')
+    .select('status, created_at')
+    .gte('created_at', hace30dias.toISOString()),
+    
+  // Productos más vendidos
+  supabase
+    .from('pedidos')
+    .select(`
+      cantidad, 
+      productos:producto_id (id, title, price)
+    `)
+    .in('status', ['pagado', 'enviado', 'entregado'])
+    .gte('created_at', hace30dias.toISOString()),
+    
+  // Clientes frecuentes
+  supabase
+    .from('pedidos')
+    .select('cliente_email, cliente_nombre, precio_total')
+    .in('status', ['pagado', 'enviado', 'entregado'])
+    .gte('created_at', hace30dias.toISOString())
+]);
+
+// Procesar datos
+const reportes = {
+  ventasHoy: ventasHoy.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
+  ventasSemana: ventasSemana.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
+  ventasMes: ventasMes.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
+  ventasAño: ventasAño.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
+  
+  pedidosHoy: ventasHoy.data?.length || 0,
+  pedidosSemana: ventasSemana.data?.length || 0,
+  pedidosMes: ventasMes.data?.length || 0,
+  
+  // Agrupar pedidos por estado
+  estadosPedidos: pedidosPorEstado.data?.reduce((acc: any, pedido: any) => {
+    acc[pedido.status] = (acc[pedido.status] || 0) + 1;
+    return acc;
+  }, {}) || {},
+  
+  // Productos más vendidos
+  topProductos: (() => {
+    const productosMap = new Map();
+    productosMasVendidos.data?.forEach((pedido: any) => {
+      if (pedido.productos) {
+        const key = pedido.productos.id;
+        const current = productosMap.get(key) || { 
+          ...pedido.productos, 
+          cantidadVendida: 0, 
+          ingresoGenerado: 0 
+        };
+        current.cantidadVendida += pedido.cantidad || 0;
+        current.ingresoGenerado += (pedido.cantidad || 0) * (pedido.productos.price || 0);
+        productosMap.set(key, current);
+      }
+    });
+    
+    return Array.from(productosMap.values())
+      .sort((a, b) => b.cantidadVendida - a.cantidadVendida)
+      .slice(0, 5);
+  })(),
+  
+  // Clientes más valiosos
+  topClientes: (() => {
+    const clientesMap = new Map();
+    clientesFrecuentes.data?.forEach((pedido: any) => {
+      const email = pedido.cliente_email;
+      const current = clientesMap.get(email) || { 
+        email, 
+        nombre: pedido.cliente_nombre || email,
+        totalCompras: 0,
+        numeroPedidos: 0
+      };
+      current.totalCompras += pedido.precio_total || 0;
+      current.numeroPedidos += 1;
+      clientesMap.set(email, current);
+    });
+    
+    return Array.from(clientesMap.values())
+      .sort((a, b) => b.totalCompras - a.totalCompras)
+      .slice(0, 5);
+  })()
+};
+
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+
+function calcularCrecimiento(actual: number, anterior: number) {
+  if (anterior === 0) return actual > 0 ? 100 : 0;
+  return Math.round(((actual - anterior) / anterior) * 100);
+}
+
+// Calcular tendencias (comparar con período anterior)
+const crecimientoSemanal = calcularCrecimiento(reportes.ventasSemana, reportes.ventasMes / 4);
+const crecimientoMensual = calcularCrecimiento(reportes.ventasMes, reportes.ventasAño / 12);
+---
+
+<DashboardLayout title="Reportes y Analytics">
+  <div class="space-y-8">
+    
+    <!-- Métricas de Ventas -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <StatCard
+        title="Ventas Hoy"
+        value={formatPrice(reportes.ventasHoy)}
+        description={`${reportes.pedidosHoy} pedidos`}
+        color="green"
+        icon="💰"
+      />
+      
+      <StatCard
+        title="Ventas Esta Semana"
+        value={formatPrice(reportes.ventasSemana)}
+        description={`${reportes.pedidosSemana} pedidos | ${crecimientoSemanal >= 0 ? '↗️' : '↘️'} ${Math.abs(crecimientoSemanal)}%`}
+        color="blue"
+        icon="📈"
+      />
+      
+      <StatCard
+        title="Ventas Este Mes"
+        value={formatPrice(reportes.ventasMes)}
+        description={`${reportes.pedidosMes} pedidos | ${crecimientoMensual >= 0 ? '↗️' : '↘️'} ${Math.abs(crecimientoMensual)}%`}
+        color="purple"
+        icon="📊"
+      />
+      
+      <StatCard
+        title="Ventas Este Año"
+        value={formatPrice(reportes.ventasAño)}
+        description="Total acumulado"
+        color="yellow"
+        icon="🏆"
+      />
+    </div>
+
+    <!-- Gráficos y Tablas -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      
+      <!-- Estados de Pedidos -->
+      <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">📊 Pedidos por Estado (30 días)</h2>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            {Object.entries(reportes.estadosPedidos).map(([estado, cantidad]: [string, any]) => {
+              const total = Object.values(reportes.estadosPedidos).reduce((a: number, b: any) => a + (b as number), 0);
+              const porcentaje = Math.round((cantidad / total) * 100);
+              
+              const colores: any = {
+                'pendiente': 'bg-yellow-200',
+                'pagado': 'bg-blue-200', 
+                'enviado': 'bg-purple-200',
+                'entregado': 'bg-green-200',
+                'cancelado': 'bg-red-200'
+              };
+              
+              return (
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center space-x-3">
+                    <div class={`w-4 h-4 rounded ${colores[estado] || 'bg-gray-200'}`}></div>
+                    <span class="font-medium capitalize">{estado}</span>
+                  </div>
+                  <div class="text-right">
+                    <div class="font-bold">{cantidad}</div>
+                    <div class="text-sm text-gray-500">{porcentaje}%</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <!-- Productos Más Vendidos -->
+      <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">🏆 Top Productos (30 días)</h2>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            {reportes.topProductos.map((producto: any, index: number) => (
+              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                  <div class="text-lg font-bold text-purple-600">#{index + 1}</div>
+                  <div>
+                    <div class="font-medium">{producto.title}</div>
+                    <div class="text-sm text-gray-500">{producto.cantidadVendida} unidades</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="font-bold">{formatPrice(producto.ingresoGenerado)}</div>
+                  <div class="text-sm text-gray-500">Ingresos</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <!-- Clientes VIP -->
+      <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">👑 Top Clientes (30 días)</h2>
+        </div>
+        <div class="p-6">
+          <div class="space-y-4">
+            {reportes.topClientes.map((cliente: any, index: number) => (
+              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                  <div class="text-lg font-bold text-green-600">#{index + 1}</div>
+                  <div>
+                    <div class="font-medium">{cliente.nombre}</div>
+                    <div class="text-sm text-gray-500">{cliente.email}</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="font-bold">{formatPrice(cliente.totalCompras)}</div>
+                  <div class="text-sm text-gray-500">{cliente.numeroPedidos} pedidos</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumen Ejecutivo -->
+      <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow border">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">📋 Resumen Ejecutivo</h2>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Ticket Promedio:</span>
+            <span class="font-bold text-green-600">
+              {formatPrice(reportes.pedidosMes > 0 ? reportes.ventasMes / reportes.pedidosMes : 0)}
+            </span>
+          </div>
+          
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Pedidos/Día Promedio:</span>
+            <span class="font-bold text-blue-600">
+              {Math.round(reportes.pedidosMes / 30)} pedidos
+            </span>
+          </div>
+          
+          <div class="flex justify-between items-center">
+            <span class="font-medium">Tasa de Conversión:</span>
+            <span class="font-bold text-purple-600">
+              {Math.round((reportes.estadosPedidos.entregado || 0) / (reportes.pedidosMes || 1) * 100)}%
+            </span>
+          </div>
+          
+          <hr class="border-gray-300">
+          
+          <div class="text-center">
+            <div class="text-2xl font-bold text-gray-800 mb-2">
+              Meta Mensual: {formatPrice(500000)} {/* Configurar meta */}
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+              <div 
+                class="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-300"
+                style={`width: ${Math.min((reportes.ventasMes / 500000) * 100, 100)}%`}
+              ></div>
+            </div>
+            <div class="text-sm text-gray-600 mt-2">
+              {Math.round((reportes.ventasMes / 500000) * 100)}% completado
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones de Reporte -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">📄 Exportar Reportes</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
+          <div class="text-center">
+            <div class="text-2xl mb-2">📊</div>
+            <div class="font-medium text-gray-700">Reporte de Ventas</div>
+            <div class="text-sm text-gray-500">Excel/CSV</div>
+          </div>
+        </button>
+        
+        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors">
+          <div class="text-center">
+            <div class="text-2xl mb-2">📦</div>
+            <div class="font-medium text-gray-700">Reporte de Productos</div>
+            <div class="text-sm text-gray-500">PDF</div>
+          </div>
+        </button>
+        
+        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors">
+          <div class="text-center">
+            <div class="text-2xl mb-2">👥</div>
+            <div class="font-medium text-gray-700">Reporte de Clientes</div>
+            <div class="text-sm text-gray-500">Excel/CSV</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script is:inline>
+    // Funciones para exportar reportes
+    function exportarVentas() {
+      alert('🚀 Funcionalidad de exportación en desarrollo...');
+    }
+    
+    function exportarProductos() {
+      alert('🚀 Funcionalidad de exportación en desarrollo...');
+    }
+    
+    function exportarClientes() {
+      alert('🚀 Funcionalidad de exportación en desarrollo...');
+    }
+  </script>
+</DashboardLayout>

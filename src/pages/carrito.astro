@@ -1,4 +1,30 @@
 ---
+export const prerender = false;
+
+import { supabase } from '../lib/supabaseClient';
+
+// Obtener productos populares para mostrar en carrito vacío
+let productosRecomendados: any[] = [];
+
+try {
+  const { data } = await supabase
+    .from('productos')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(4);
+  
+  productosRecomendados = data || [];
+} catch (error) {
+  console.error('Error cargando productos:', error);
+}
+
+// Función para formatear precios
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
 ---
 
 <html lang="es">
@@ -9,28 +35,465 @@
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-50 text-gray-900">
-    <!-- Header simple -->
-    <header class="bg-white shadow">
+    <!-- Header mejorado -->
+    <header class="bg-white shadow-sm border-b">
       <div class="container mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
           <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
-          <nav class="space-x-4">
-            <a href="/" class="text-gray-700 hover:text-purple-600">Inicio</a>
+          <nav class="flex items-center space-x-6">
+            <a href="/" class="text-gray-700 hover:text-purple-600 transition-colors">Inicio</a>
+            <a href="/admin/productos" class="text-gray-700 hover:text-purple-600 transition-colors">Admin</a>
+            <div class="relative">
+              <button class="text-gray-700 hover:text-purple-600">
+                🛒 <span id="cart-badge" class="bg-red-500 text-white text-xs rounded-full px-2 py-1 ml-1 hidden">0</span>
+              </button>
+            </div>
           </nav>
         </div>
       </div>
     </header>
 
     <main class="container mx-auto px-6 py-12">
+      <div class="mb-8">
+        <h1 class="text-4xl font-bold mb-2">🛒 Tu carrito</h1>
+        <p class="text-gray-600">Revisa tus productos y procede con tu pedido</p>
+      </div>
+
+      <!-- Contenedor del carrito -->
+      <div class="max-w-4xl mx-auto">
+        <div id="cart-container" class="space-y-4"></div>
+
+        <!-- Carrito vacío -->
+        <div id="empty-cart" class="text-center py-12 hidden">
+          <div class="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
+            <!-- Carrito vacío -->
+            <div class="mb-8">
+              <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                </svg>
+              </div>
+              <h2 class="text-2xl font-semibold text-gray-800 mb-4">Tu carrito está vacío</h2>
+              <p class="text-gray-600 mb-8">¡Descubre nuestros productos y agrega algunos a tu carrito!</p>
+              <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg transition-colors inline-block mb-8">
+                Explorar productos
+              </a>
+            </div>
+
+            <!-- Productos recomendados -->
+            {productosRecomendados.length > 0 && (
+              <div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-6">Productos que podrían interesarte</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {productosRecomendados.map((producto) => (
+                    <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      {producto.images?.[0] && (
+                        <img 
+                          src={producto.images[0]} 
+                          alt={producto.title} 
+                          class="w-full h-32 object-cover rounded-lg mb-3"
+                        />
+                      )}
+                      <h4 class="font-semibold text-gray-900 mb-2">{producto.title}</h4>
+                      <p class="text-purple-600 font-bold mb-3">{formatPrice(producto.price)}</p>
+                      <a 
+                        href={`/producto/${producto.id}`}
+                        class="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors text-sm inline-block text-center"
+                      >
+                        Ver producto
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <!-- Resumen y acciones -->
+        <div id="cart-summary" class="mt-8 hidden">
+          <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="text-2xl font-semibold">Resumen del pedido</h2>
+              <button 
+                id="clear-cart"
+                class="text-red-500 hover:text-red-700 text-sm underline"
+              >
+                Vaciar carrito
+              </button>
+            </div>
+
+            <div class="border-t pt-4">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-600">Subtotal:</span>
+                <span id="cart-subtotal" class="font-semibold">$0</span>
+              </div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-600">Envío:</span>
+                <span class="text-sm text-gray-500">A consultar</span>
+              </div>
+              <div class="border-t pt-2 flex justify-between items-center">
+                <span class="text-xl font-bold">Total:</span>
+                <span id="cart-total" class="text-xl font-bold text-purple-600">$0</span>
+              </div>
+            </div>
+
+            <div class="mt-6 space-y-3">
+              <a 
+                id="whatsapp-link" 
+                href="#" 
+                target="_blank" 
+                class="block w-full bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg transition-colors text-center font-semibold"
+              >
+                📱 Continuar por WhatsApp
+              </a>
+              
+              <button 
+                id="checkout-btn" 
+                class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-lg transition-colors font-semibold"
+              >
+                💳 Continuar al checkout
+              </button>
+              
+              <a 
+                href="/" 
+                class="block w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-lg transition-colors text-center"
+              >
+                ← Seguir comprando
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script define:vars={{ productosRecomendados }}>
+      // 🛒 Sistema de carrito mejorado
+      
+      // Obtener carrito del localStorage
+      function getCart() {
+        try {
+          const cart = localStorage.getItem('cart');
+          return cart ? JSON.parse(cart) : [];
+        } catch (error) {
+          console.error('Error obteniendo carrito:', error);
+          return [];
+        }
+      }
+
+      // Guardar carrito en localStorage
+      function saveCart(cart) {
+        try {
+          localStorage.setItem('cart', JSON.stringify(cart));
+          updateCartBadge();
+        } catch (error) {
+          console.error('Error guardando carrito:', error);
+        }
+      }
+
+      // Actualizar badge del carrito
+      function updateCartBadge() {
+        const cart = getCart();
+        const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+        const badge = document.getElementById('cart-badge');
+        if (badge) {
+          badge.textContent = totalItems;
+          badge.style.display = totalItems > 0 ? 'inline' : 'none';
+        }
+      }
+
+      // Formatear precio
+      function formatPrice(price) {
+        return new Intl.NumberFormat('es-CO', {
+          style: 'currency',
+          currency: 'COP',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
+        }).format(price);
+      }
+
+      // Eliminar producto del carrito - FIX
+      function removeFromCart(productId) {
+        console.log('🗑️ Eliminando producto ID:', productId);
+        const cart = getCart();
+        console.log('📦 Carrito antes:', cart.map(item => ({ id: item.id, title: item.title })));
+        
+        // Convertir ambos IDs a string para comparación segura
+        const updatedCart = cart.filter(item => String(item.id) !== String(productId));
+        
+        console.log('📦 Carrito después:', updatedCart.map(item => ({ id: item.id, title: item.title })));
+        console.log(`✅ Productos eliminados: ${cart.length - updatedCart.length}`);
+        
+        saveCart(updatedCart);
+        renderCart();
+        showNotification('Producto eliminado del carrito', 'info');
+      }
+
+      // Actualizar cantidad de producto
+      function updateQuantity(productId, newQuantity) {
+        newQuantity = parseInt(newQuantity);
+        console.log(`🔄 Actualizando cantidad: ${productId} -> ${newQuantity}`);
+        
+        if (newQuantity < 1) {
+          removeFromCart(productId);
+          return;
+        }
+
+        const cart = getCart();
+        const item = cart.find(item => String(item.id) === String(productId));
+        if (item) {
+          item.quantity = newQuantity;
+          saveCart(cart);
+          renderCart();
+          console.log(`✅ Cantidad actualizada: ${item.title} -> ${newQuantity}`);
+        }
+      }
+
+      // Mostrar notificación
+      function showNotification(message, type) {
+        type = type || 'success';
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 transition-all duration-300 ${
+          type === 'success' ? 'bg-green-500' : 
+          type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+        }`;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.style.transform = 'translateX(100%)';
+          setTimeout(() => {
+            if (document.body.contains(notification)) {
+              document.body.removeChild(notification);
+            }
+          }, 300);
+        }, 3000);
+      }
+
+      // Renderizar carrito
+      function renderCart() {
+        const cart = getCart();
+        const cartContainer = document.getElementById('cart-container');
+        const emptyCart = document.getElementById('empty-cart');
+        const summary = document.getElementById('cart-summary');
+
+        console.log('🎨 Renderizando carrito con', cart.length, 'productos');
+
+        if (cart.length === 0) {
+          if (cartContainer) cartContainer.innerHTML = '';
+          if (emptyCart) emptyCart.classList.remove('hidden');
+          if (summary) summary.classList.add('hidden');
+          return;
+        }
+
+        if (emptyCart) emptyCart.classList.add('hidden');
+        if (summary) summary.classList.remove('hidden');
+
+        // Renderizar items del carrito
+        if (cartContainer) {
+          cartContainer.innerHTML = cart.map(item => `
+            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow">
+              <div class="flex items-start space-x-4">
+                ${item.image || (item.images && item.images[0]) ? `
+                  <img 
+                    src="${item.image || item.images[0]}" 
+                    alt="${item.title}" 
+                    class="w-24 h-24 object-cover rounded-lg flex-shrink-0"
+                    onerror="this.parentElement.innerHTML='<div class=\\'w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0\\'>📷</div>'"
+                  >
+                ` : `
+                  <div class="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                    📷
+                  </div>
+                `}
+                
+                <div class="flex-1">
+                  <h3 class="text-lg font-semibold text-gray-900 mb-2">${item.title}</h3>
+                  <p class="text-purple-600 font-bold text-lg mb-2">${formatPrice(item.price)}</p>
+                  ${item.sku ? `<p class="text-sm text-gray-500 mb-2">SKU: ${item.sku}</p>` : ''}
+                  
+                  <!-- Controles de cantidad -->
+                  <div class="flex items-center space-x-3">
+                    <span class="text-sm text-gray-600">Cantidad:</span>
+                    <button 
+                      onclick="updateQuantity('${item.id}', ${item.quantity - 1})"
+                      class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors"
+                      ${item.quantity <= 1 ? 'title="Eliminar producto"' : ''}
+                    >
+                      ${item.quantity <= 1 ? '🗑️' : '−'}
+                    </button>
+                    
+                    <input 
+                      type="number" 
+                      value="${item.quantity}" 
+                      min="1" 
+                      max="99"
+                      class="w-16 text-center border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      onchange="updateQuantity('${item.id}', this.value)"
+                    />
+                    
+                    <button 
+                      onclick="updateQuantity('${item.id}', ${item.quantity + 1})"
+                      class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Total del item -->
+                <div class="text-right">
+                  <p class="text-xl font-bold text-gray-900 mb-2">${formatPrice(item.price * item.quantity)}</p>
+                  <button 
+                    onclick="removeFromCart('${item.id}')"
+                    class="text-red-500 hover:text-red-700 text-sm font-medium underline"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        // Actualizar totales
+        const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        
+        const totalElement = document.getElementById('cart-total');
+        const subtotalElement = document.getElementById('cart-subtotal');
+        
+        if (totalElement) totalElement.textContent = formatPrice(total);
+        if (subtotalElement) subtotalElement.textContent = formatPrice(total);
+
+        // Actualizar enlace de WhatsApp
+        updateWhatsAppLink(cart, total);
+      }
+
+      // Actualizar enlace de WhatsApp
+      function updateWhatsAppLink(cart, total) {
+        const whatsappLink = document.getElementById('whatsapp-link');
+        if (!whatsappLink) return;
+        
+        let message = "🛒 *Carrito de Compras - TuMarca*\\n\\n";
+        
+        cart.forEach((item, index) => {
+          message += `${index + 1}. *${item.title}*\\n`;
+          message += `   └ Cantidad: ${item.quantity}\\n`;
+          message += `   └ Precio: ${formatPrice(item.price)}\\n`;
+          message += `   └ Subtotal: ${formatPrice(item.price * item.quantity)}\\n\\n`;
+        });
+        
+        message += `💰 *Total: ${formatPrice(total)}*\\n\\n`;
+        message += "¡Hola! Me interesan estos productos. ¿Podrían confirmar disponibilidad y darme información sobre el proceso de compra y envío?";
+        
+        const encodedMessage = encodeURIComponent(message);
+        const phoneNumber = "573053947290"; // Tu número de WhatsApp
+        
+        whatsappLink.href = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+      }
+
+      // Vaciar carrito
+      function clearCart() {
+        if (confirm('¿Estás seguro de que quieres vaciar tu carrito?')) {
+          saveCart([]);
+          renderCart();
+          showNotification('Carrito vaciado', 'info');
+        }
+      }
+
+      // Checkout - redirigir a página de checkout
+      function proceedToCheckout() {
+        const cart = getCart();
+        if (cart.length === 0) {
+          showNotification('Tu carrito está vacío', 'error');
+          return;
+        }
+        
+        console.log('🛒 Redirigiendo a checkout con', cart.length, 'productos');
+        window.location.href = '/checkout';
+      }
+
+      // Inicializar cuando el DOM esté listo
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Inicializando carrito...');
+        renderCart();
+        updateCartBadge();
+        
+        // Event listeners
+        const clearButton = document.getElementById('clear-cart');
+        if (clearButton) {
+          clearButton.addEventListener('click', clearCart);
+        }
+
+        const checkoutBtn = document.getElementById('checkout-btn');
+        if (checkoutBtn) {
+          checkoutBtn.addEventListener('click', proceedToCheckout);
+        }
+
+        // Debug info
+        const cart = getCart();
+        console.log(`🛒 Carrito cargado: ${cart.length} tipos de productos`);
+        if (cart.length > 0) {
+          console.log('Productos en carrito:', cart.map(item => ({ id: item.id, title: item.title, qty: item.quantity })));
+        }
+      });
+
+      // Hacer funciones globales para onclick
+      window.updateQuantity = updateQuantity;
+      window.removeFromCart = removeFromCart;
+      window.clearCart = clearCart;
+    </script>
+  </body>
+</html>
       <h1 class="text-4xl font-bold mb-10 text-center">Tu carrito</h1>
 
       <div id="cart-container" class="space-y-4 max-w-2xl mx-auto"></div>
 
       <div id="empty-cart" class="text-center py-12 hidden">
-        <p class="text-gray-600 text-lg mb-6">Tu carrito está vacío.</p>
-        <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded transition">
-          Continuar comprando
-        </a>
+        <div class="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
+          <!-- Carrito vacío -->
+          <div class="mb-8">
+            <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+              <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+              </svg>
+            </div>
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Tu carrito está vacío</h2>
+            <p class="text-gray-600 mb-8">¡Descubre nuestros productos y agrega algunos a tu carrito!</p>
+            <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg transition-colors inline-block mb-8">
+              Explorar productos
+            </a>
+          </div>
+
+          <!-- Productos recomendados -->
+          {productosRecomendados.length > 0 && (
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800 mb-6">Productos que podrían interesarte</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {productosRecomendados.map((producto) => (
+                  <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    {producto.images?.[0] && (
+                      <img 
+                        src={producto.images[0]} 
+                        alt={producto.title} 
+                        class="w-full h-32 object-cover rounded-lg mb-3"
+                      />
+                    )}
+                    <h4 class="font-semibold text-gray-900 mb-2">{producto.title}</h4>
+                    <p class="text-purple-600 font-bold mb-3">{formatPrice(producto.price)}</p>
+                    <a 
+                      href={`/producto/${producto.id}`}
+                      class="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors text-sm inline-block text-center"
+                    >
+                      Ver producto
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div id="summary" class="mt-10 text-center hidden max-w-md mx-auto">

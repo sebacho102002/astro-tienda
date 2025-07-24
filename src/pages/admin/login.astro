@@ -1,0 +1,164 @@
+---
+export const prerender = false;
+
+import { loginUser, getSessionFromToken } from '../../lib/auth';
+
+// Verificar si ya está logueado
+const authCookie = Astro.request.headers.get('cookie');
+if (authCookie?.includes('admin-token=')) {
+  const tokenMatch = authCookie.match(/admin-token=([^;]+)/);
+  if (tokenMatch) {
+    const session = await getSessionFromToken(tokenMatch[1]);
+    if (session) {
+      return Astro.redirect('/admin/dashboard');
+    }
+  }
+}
+
+let error = '';
+let success = '';
+
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const email = formData.get('email')?.toString() || '';
+    const password = formData.get('password')?.toString() || '';
+    
+    // Obtener IP y User Agent para auditoría
+    const ipAddress = Astro.request.headers.get('x-forwarded-for') || 
+                     Astro.request.headers.get('x-real-ip') || 
+                     'unknown';
+    const userAgent = Astro.request.headers.get('user-agent') || 'unknown';
+
+    console.log('🔐 Intento de login:', { email, ipAddress });
+    
+    // Intentar login con base de datos
+    const { user, accessToken } = await loginUser(email, password, ipAddress, userAgent);
+    
+    console.log('✅ Login exitoso, generando respuesta:', { userId: user.id, role: user.role });
+    console.log('🍪 Token generado (primeros 20 chars):', accessToken.substring(0, 20));
+    
+    // Configurar cookie segura con JWT
+    const headers = new Headers();
+    headers.append('Location', '/admin/dashboard');
+    headers.append('Set-Cookie', `admin-token=${accessToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Strict`);
+    
+    console.log('🚀 Redirigiendo a dashboard con cookie configurada');
+    
+    return new Response('', {
+      status: 302,
+      headers
+    });
+    
+  } catch (e) {
+    console.error('❌ Error en login:', e);
+    error = e instanceof Error ? e.message : 'Error procesando el login. Intenta de nuevo.';
+  }
+}
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Login Admin - E-commerce</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gradient-to-br from-purple-100 via-white to-blue-100 min-h-screen flex items-center justify-center">
+    
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <div class="w-20 h-20 bg-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+          <span class="text-3xl text-white">🛡️</span>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">Panel de Administración</h1>
+        <p class="text-gray-600">Ingresa tus credenciales para continuar</p>
+      </div>
+
+      <!-- Alertas -->
+      {error && (
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <div class="flex items-center">
+            <span class="mr-2">❌</span>
+            <span class="text-sm">{error}</span>
+          </div>
+        </div>
+      )}
+
+      {success && (
+        <div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+          <div class="flex items-center">
+            <span class="mr-2">✅</span>
+            <span class="text-sm">{success}</span>
+          </div>
+        </div>
+      )}
+
+      <!-- Formulario de Login -->
+      <form method="POST" class="space-y-6">
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+            📧 Email
+          </label>
+          <input 
+            type="email" 
+            id="email" 
+            name="email" 
+            required
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+            placeholder="admin@tutienda.com"
+          />
+        </div>
+
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+            🔒 Contraseña
+          </label>
+          <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            required
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button 
+          type="submit"
+          class="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+        >
+          🚀 Iniciar Sesión
+        </button>
+      </form>
+
+      <!-- Credenciales de prueba -->
+      <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">🧪 Credenciales de prueba:</h3>
+        <div class="space-y-2 text-xs">
+          <div class="flex justify-between">
+            <span class="text-purple-600 font-medium">Super Admin:</span>
+            <span class="text-gray-600">admin@tutienda.com / admin123</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-blue-600 font-medium">Manager:</span>
+            <span class="text-gray-600">manager@tutienda.com / manager123</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-green-600 font-medium">Editor:</span>
+            <span class="text-gray-600">editor@tutienda.com / editor123</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enlaces -->
+      <div class="mt-6 text-center">
+        <a href="/" class="text-sm text-purple-600 hover:text-purple-700 transition-colors">
+          ← Volver a la tienda
+        </a>
+      </div>
+    </div>
+
+  </body>
+</html>

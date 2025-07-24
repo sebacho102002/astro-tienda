@@ -5,6 +5,12 @@ import { supabase } from '../../lib/supabaseClient';
 // 📦 Obtener todos los pedidos con información del producto
 let pedidos: any[] = [];
 let error: string | null = null;
+let estadisticas = {
+  total: 0,
+  pendientes: 0,
+  completados: 0,
+  ingresos: 0
+};
 
 try {
   const { data, error: pedidosError } = await supabase
@@ -12,6 +18,7 @@ try {
     .select(`
       *,
       productos:producto_id (
+        id,
         title,
         sku,
         price,
@@ -25,6 +32,17 @@ try {
   }
 
   pedidos = data || [];
+  
+  // Calcular estadísticas
+  estadisticas = {
+    total: pedidos.length,
+    pendientes: pedidos.filter(p => ['pendiente', 'pagado', 'enviado'].includes(p.status)).length,
+    completados: pedidos.filter(p => p.status === 'entregado').length,
+    ingresos: pedidos
+      .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
+      .reduce((sum, p) => sum + (p.total || 0), 0)
+  };
+  
 } catch (e: any) {
   console.error('Error cargando pedidos:', e);
   error = e instanceof Error ? e.message : 'Error desconocido';
@@ -60,26 +78,27 @@ function formatPrice(price: number) {
         <p class="text-gray-600">Administra todos los pedidos y pagos</p>
       </div>
       
-      <!-- Stats rápidas -->
+      <!-- Estadísticas mejoradas -->
       <div class="grid grid-cols-4 gap-4">
-        <div class="bg-yellow-50 p-3 rounded-lg text-center">
-          <div class="text-lg font-bold text-yellow-700">
-            {pedidos.filter(p => p.estado === 'pendiente').length}
-          </div>
-          <div class="text-xs text-yellow-600">Pendientes</div>
+        <div class="bg-blue-50 p-4 rounded-lg text-center">
+          <div class="text-2xl font-bold text-blue-700">{estadisticas.total}</div>
+          <div class="text-sm text-blue-600">Total Pedidos</div>
         </div>
-        <div class="bg-green-50 p-3 rounded-lg text-center">
-          <div class="text-lg font-bold text-green-700">
-            {pedidos.filter(p => p.estado === 'pagado').length}
-          </div>
-          <div class="text-xs text-green-600">Pagados</div>
+        <div class="bg-yellow-50 p-4 rounded-lg text-center">
+          <div class="text-2xl font-bold text-yellow-700">{estadisticas.pendientes}</div>
+          <div class="text-sm text-yellow-600">En Proceso</div>
         </div>
-        <div class="bg-blue-50 p-3 rounded-lg text-center">
-          <div class="text-lg font-bold text-blue-700">
-            {pedidos.filter(p => p.estado === 'enviado').length}
-          </div>
-          <div class="text-xs text-blue-600">Enviados</div>
+        <div class="bg-green-50 p-4 rounded-lg text-center">
+          <div class="text-2xl font-bold text-green-700">{estadisticas.completados}</div>
+          <div class="text-sm text-green-600">Completados</div>
         </div>
+        <div class="bg-purple-50 p-4 rounded-lg text-center">
+          <div class="text-2xl font-bold text-purple-700">
+            {formatPrice(estadisticas.ingresos)}
+          </div>
+          <div class="text-sm text-purple-600">Ingresos</div>
+        </div>
+      </div>
         <div class="bg-purple-50 p-3 rounded-lg text-center">
           <div class="text-lg font-bold text-purple-700">
             {pedidos.filter(p => p.estado === 'entregado').length}
@@ -143,7 +162,7 @@ function formatPrice(price: number) {
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                {pedidos.map((pedido) => (
+                {pedidos.map((pedido: any) => (
                   <tr>
                     <td class="px-6 py-4 whitespace-nowrap">
                       <div class="text-sm font-medium text-gray-900">
@@ -217,14 +236,22 @@ function formatPrice(price: number) {
                         class="text-blue-600 hover:text-blue-900"
                         onclick={`verDetallesPedido('${pedido.id}')`}
                       >
-                        Ver
+                        👁️ Ver
                       </button>
                       <button 
                         class="text-green-600 hover:text-green-900"
-                        onclick={`actualizarEstado('${pedido.id}', '${pedido.estado}')`}
+                        onclick={`actualizarEstado('${pedido.id}', '${pedido.status || pedido.estado}')`}
                       >
-                        Actualizar
+                        ✏️ Estado
                       </button>
+                      {pedido.status !== 'entregado' && (
+                        <button 
+                          class="text-red-600 hover:text-red-900"
+                          onclick={`eliminarPedido('${pedido.id}', '${pedido.numero_pedido || pedido.id.slice(0, 8)}', event)`}
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -237,8 +264,9 @@ function formatPrice(price: number) {
   </div>
 
   <!-- Modal para actualizar estado -->
-  <div id="modal-estado" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+  <div id="modal-estado" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+    <div class="flex items-center justify-center min-h-full p-4">
+      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
       <h3 class="text-lg font-semibold mb-4">Actualizar Estado del Pedido</h3>
       <select id="nuevo-estado" class="w-full p-2 border border-gray-300 rounded-lg mb-4">
         <option value="pendiente">Pendiente</option>
@@ -264,13 +292,54 @@ function formatPrice(price: number) {
     </div>
   </div>
 
-  <script>
+  </div>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ pedidos }}>
     let pedidoIdActual = '';
     
     function verDetallesPedido(pedidoId) {
-      // Implementar modal de detalles o redirigir a página de detalles
-      console.log('Ver detalles del pedido:', pedidoId);
-      alert('Funcionalidad de detalles en desarrollo');
+      // Buscar el pedido en los datos actuales
+      const pedido = pedidos.find(p => p.id === pedidoId);
+      
+      if (pedido) {
+        const formatPrice = (price) => new Intl.NumberFormat('es-CO', { 
+          style: 'currency', 
+          currency: 'COP',
+          minimumFractionDigits: 0 
+        }).format(price);
+        
+        const detalles = `
+📦 DETALLES DEL PEDIDO
+
+🔢 Número: ${pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}
+👤 Cliente: ${pedido.cliente_nombre}
+📧 Email: ${pedido.cliente_email}
+📱 Teléfono: ${pedido.cliente_telefono || 'No proporcionado'}
+
+📍 DIRECCIÓN DE ENVÍO:
+${pedido.direccion_envio || 'No proporcionado'}
+🏙️ Ciudad: ${pedido.ciudad || 'No proporcionado'}
+📮 Código Postal: ${pedido.codigo_postal || 'No proporcionado'}
+
+🛍️ PRODUCTO:
+${pedido.productos?.title || 'Producto eliminado'}
+📦 SKU: ${pedido.productos?.sku || 'N/A'}
+💰 Precio unitario: ${formatPrice(pedido.precio_unitario)}
+🔢 Cantidad: ${pedido.cantidad}
+💵 Total: ${formatPrice(pedido.precio_total)}
+
+📊 ESTADO: ${pedido.estado.toUpperCase()}
+💳 Método de pago: ${pedido.metodo_pago}
+📅 Fecha: ${new Date(pedido.created_at).toLocaleDateString('es-ES')}
+        `;
+        
+        alert(detalles);
+      } else {
+        alert('❌ No se encontraron los detalles del pedido');
+      }
     }
     
     function actualizarEstado(pedidoId, estadoActual) {
@@ -281,6 +350,7 @@ function formatPrice(price: number) {
       if (modal && select) {
         select.value = estadoActual;
         modal.classList.remove('hidden');
+        modal.querySelector('.flex')?.classList.add('flex');
       }
     }
     
@@ -288,28 +358,97 @@ function formatPrice(price: number) {
       const modal = document.getElementById('modal-estado');
       if (modal) {
         modal.classList.add('hidden');
+        modal.querySelector('.flex')?.classList.remove('flex');
       }
     }
     
     async function confirmarActualizacion() {
-      const nuevoEstado = (document.getElementById('nuevo-estado') as HTMLSelectElement)?.value;
+      const nuevoEstado = document.getElementById('nuevo-estado')?.value;
       
       if (!nuevoEstado || !pedidoIdActual) return;
       
       try {
-        // Aquí implementarías la API para actualizar el estado
-        console.log('Actualizando pedido:', pedidoIdActual, 'a estado:', nuevoEstado);
-        
-        // Por ahora solo simulamos
-        alert(`Pedido actualizado a: ${nuevoEstado}`);
-        cerrarModal();
-        
-        // En producción, recargarías los datos o actualizarías la UI
-        // window.location.reload();
+        const response = await fetch('/api/pedidos/update-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pedidoId: pedidoIdActual,
+            nuevoEstado: nuevoEstado
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          alert(`✅ ${result.message}`);
+          cerrarModal();
+          
+          // Recargar la página para mostrar los cambios
+          window.location.reload();
+        } else {
+          throw new Error(result.error || 'Error al actualizar el pedido');
+        }
         
       } catch (error) {
-        console.error('Error actualizando pedido:', error);
-        alert('Error al actualizar el pedido');
+        console.error('Error:', error);
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
+
+    // Nueva función para eliminar pedidos
+    async function eliminarPedido(id, numeroPedido, event) {
+      const confirmMessage = `¿Estás seguro de que quieres eliminar el pedido #${numeroPedido}?\n\n⚠️ IMPORTANTE:\n• Esta acción no se puede deshacer\n• Se eliminará permanentemente de la base de datos\n• Los pedidos entregados no se pueden eliminar (se conservan para el historial)`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Mostrar indicador de carga
+      const button = event.target;
+      const originalText = button.innerHTML;
+      button.innerHTML = '⏳ Eliminando...';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+
+      try {
+        console.log('🗑️ Enviando solicitud de eliminación para pedido:', id);
+        
+        const response = await fetch('/api/pedidos/delete', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id })
+        });
+
+        console.log('📡 Respuesta del servidor:', response.status);
+        const data = await response.json();
+
+        if (response.ok) {
+          console.log('✅ Pedido eliminado:', data);
+          alert(`✅ ${data.message}`);
+          location.reload();
+          
+        } else if (response.status === 409) {
+          // Pedido no se puede eliminar
+          console.warn('⚠️ Pedido protegido:', data);
+          alert(`⚠️ ${data.error}\n\n💡 ${data.warning || ''}`);
+          
+        } else {
+          // Otros errores
+          console.error('❌ Error del servidor:', data);
+          alert(`❌ Error: ${data.error || 'No se pudo eliminar el pedido'}\n\nDetalles: ${data.details || 'Error desconocido'}`);
+        }
+      } catch (error) {
+        console.error('❌ Error de red:', error);
+        alert('❌ Error de conexión\n\nNo se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.');
+      } finally {
+        // Restaurar botón
+        button.innerHTML = originalText;
+        button.disabled = false;
+        button.style.opacity = '1';
       }
     }
   </script>

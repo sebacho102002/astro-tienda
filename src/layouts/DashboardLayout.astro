@@ -1,29 +1,275 @@
 ---
-const { title = "Panel", children } = Astro.props;
+const { title = "Panel Admin" } = Astro.props;
+const currentPath = Astro.url.pathname;
+
+import { getSessionFromToken } from '../lib/auth';
+
+// Obtener información del usuario del token JWT
+let userSession: any = null;
+try {
+  const cookieHeader = Astro.request.headers.get('cookie') || '';
+  const tokenMatch = cookieHeader.match(/admin-token=([^;]+)/);
+  
+  if (tokenMatch) {
+    const token = tokenMatch[1];
+    console.log('🔍 Token encontrado en layout, obteniendo sesión...');
+    userSession = await getSessionFromToken(token);
+    console.log('👤 Sesión en layout:', userSession);
+  } else {
+    console.warn('⚠️ No se encontró token admin-token en layout');
+  }
+} catch (e) {
+  console.error('❌ Error parseando sesión de usuario:', e);
+}
+
+// Función para determinar si un enlace está activo
+function isActiveLink(href: string) {
+  return currentPath === href || currentPath.startsWith(href + '/');
+}
+
+// Configuración de permisos por rol
+const ROLE_PERMISSIONS = {
+  super_admin: ['dashboard', 'productos', 'pedidos', 'inventario', 'reportes'],
+  manager: ['dashboard', 'productos', 'pedidos', 'inventario', 'reportes'],
+  editor: ['dashboard', 'productos', 'inventario'],
+  viewer: ['dashboard']
+};
+
+function canAccess(resource: string): boolean {
+  if (!userSession) return false;
+  const permissions = ROLE_PERMISSIONS[userSession.role as keyof typeof ROLE_PERMISSIONS] || [];
+  return userSession.role === 'super_admin' || permissions.includes(resource);
+}
+
+function getRoleBadge(role: string) {
+  const badges = {
+    super_admin: { color: 'bg-purple-100 text-purple-800', text: '👑 Super Admin' },
+    manager: { color: 'bg-blue-100 text-blue-800', text: '👨‍💼 Manager' },
+    editor: { color: 'bg-green-100 text-green-800', text: '✏️ Editor' },
+    viewer: { color: 'bg-gray-100 text-gray-800', text: '👁️ Viewer' }
+  };
+  return badges[role as keyof typeof badges] || badges.viewer;
+}
+
+// Verificar si hay error de permisos
+const urlParams = new URLSearchParams(Astro.url.search);
+const permissionError = urlParams.get('error') === 'insufficient_permissions';
 ---
 
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <title>{title}</title>
+    <title>{title} - Admin Panel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body class="bg-gray-100 font-sans text-gray-900">
+  <body class="bg-gray-50 font-sans text-gray-900">
     <div class="flex h-screen">
       <!-- Sidebar -->
-      <aside class="w-64 bg-purple-700 text-white p-6 space-y-6">
-        <h2 class="text-2xl font-bold">TuMarca</h2>
-        <nav class="space-y-2">
-          <a href="/admin/productos" class="block hover:bg-purple-600 p-2 rounded">📦 Productos</a>
-          <a href="/admin/pedidos" class="block hover:bg-purple-600 p-2 rounded">🧾 Pedidos</a>
-          <a href="/" class="block hover:bg-purple-600 p-2 rounded">↩️ Ir al sitio</a>
-        </nav>
+      <aside class="w-64 bg-white border-r border-gray-200 shadow-sm">
+        <div class="p-6">
+          <div class="flex items-center space-x-3 mb-8">
+            <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+              <span class="text-white font-bold">🛒</span>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-900">Admin Panel</h2>
+              <p class="text-xs text-gray-500">E-commerce</p>
+            </div>
+          </div>
+          
+          <nav class="space-y-2">
+            <a 
+              href="/admin/dashboard" 
+              class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                isActiveLink('/admin/dashboard') 
+                  ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <span class="text-lg">📊</span>
+              <span class="font-medium">Dashboard</span>
+            </a>
+            
+            {canAccess('productos') && (
+              <a 
+                href="/admin/productos" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/productos') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">📦</span>
+                <span class="font-medium">Productos</span>
+              </a>
+            )}
+            
+            {canAccess('pedidos') && (
+              <a 
+                href="/admin/pedidos" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/pedidos') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">🧾</span>
+                <span class="font-medium">Pedidos</span>
+              </a>
+            )}
+            
+            {canAccess('inventario') && (
+              <a 
+                href="/admin/inventario" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/inventario') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">📊</span>
+                <span class="font-medium">Inventario</span>
+              </a>
+            )}
+            
+            {canAccess('reportes') && (
+              <a 
+                href="/admin/reportes" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/reportes') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">📈</span>
+                <span class="font-medium">Reportes</span>
+              </a>
+            )}
+            
+            <hr class="my-4 border-gray-200">
+            
+            {userSession?.role === 'super_admin' && (
+              <a 
+                href="/admin/usuarios" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/usuarios') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">👥</span>
+                <span class="font-medium">Usuarios</span>
+              </a>
+            )}
+            
+            {canAccess('productos') && (
+              <a 
+                href="/admin/nuevo-producto" 
+                class="flex items-center space-x-3 p-3 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                <span class="text-lg">➕</span>
+                <span class="font-medium">Nuevo Producto</span>
+              </a>
+            )}
+            
+            <a 
+              href="/" 
+              target="_blank"
+              class="flex items-center space-x-3 p-3 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            >
+              <span class="text-lg">🌐</span>
+              <span class="font-medium">Ver Tienda</span>
+            </a>
+          </nav>
+        </div>
+        
+        <!-- Footer del sidebar -->
+        <div class="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200">
+          <div class="text-xs text-gray-500 text-center">
+            <p>© 2025 E-commerce Admin</p>
+            <p class="mt-1">v2.0.0 - Sistema Seguro</p>
+          </div>
+        </div>
       </aside>
 
       <!-- Main content -->
-      <main class="flex-1 p-8 overflow-y-auto">
-        <slot />
+      <main class="flex-1 overflow-y-auto">
+        <!-- Top bar con información de usuario -->
+        <div class="bg-white border-b border-gray-200 px-8 py-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">{title}</h1>
+              {permissionError && (
+                <div class="mt-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                  <span class="mr-2">🚫</span>
+                  No tienes permisos suficientes para acceder a ese recurso.
+                </div>
+              )}
+            </div>
+            <div class="flex items-center space-x-4">
+              {userSession && (
+                <div class="flex items-center space-x-3">
+                  <div class="text-right">
+                    <div class="text-sm font-medium text-gray-900">{userSession.name}</div>
+                    <div class="text-xs text-gray-500">{userSession.email}</div>
+                  </div>
+                  <div class={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadge(userSession.role).color}`}>
+                    {getRoleBadge(userSession.role).text}
+                  </div>
+                  <button 
+                    onclick="logout()"
+                    class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm transition-colors"
+                    title="Cerrar sesión"
+                  >
+                    🚪 Logout
+                  </button>
+                </div>
+              )}
+              <div class="text-sm text-gray-500">
+                {new Date().toLocaleDateString('es-ES', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Content area -->
+        <div class="p-8">
+          <slot />
+        </div>
       </main>
     </div>
+
+    <script is:inline>
+      async function logout() {
+        if (!confirm('¿Estás seguro que deseas cerrar sesión?')) {
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            alert('✅ Sesión cerrada correctamente');
+            window.location.href = '/admin/login';
+          } else {
+            throw new Error('Error cerrando sesión');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          alert('❌ Error cerrando sesión. Intenta de nuevo.');
+        }
+      }
+    </script>
   </body>
 </html>
