@@ -5,34 +5,87 @@ import DashboardLayout from "../../layouts/DashboardLayout.astro";
 import StatCard from "../../components/StatCard.astro";
 import { supabase } from "../../lib/supabaseClient.js";
 
+// Función para obtener datos de ventas por día (últimos 30 días)
+async function getVentasPorDia() {
+  const hace30Dias = new Date();
+  hace30Dias.setDate(hace30Dias.getDate() - 30);
+  
+  const { data } = await supabase
+    .from('pedidos')
+    .select('created_at, precio_total, status')
+    .gte('created_at', hace30Dias.toISOString())
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false });
+    
+  return data || [];
+}
+
+// Función para agrupar ventas por día
+function agruparVentasPorDia(pedidos: any[]) {
+  const ventasPorDia = new Map();
+  
+  pedidos.forEach(pedido => {
+    const fecha = new Date(pedido.created_at).toISOString().split('T')[0];
+    if (ventasPorDia.has(fecha)) {
+      ventasPorDia.set(fecha, ventasPorDia.get(fecha) + parseFloat(pedido.precio_total));
+    } else {
+      ventasPorDia.set(fecha, parseFloat(pedido.precio_total));
+    }
+  });
+  
+  return Array.from(ventasPorDia.entries()).map(([fecha, total]) => ({ fecha, total }));
+}
+
 // Obtener estadísticas completas
 const statsPromises = await Promise.all([
-  // Productos
-  supabase.from('productos').select('id, stock, price, created_at'),
-  // Pedidos
-  supabase.from('pedidos').select('id, status, precio_total, created_at, cliente_email'),
+  // Productos con nombre
+  supabase.from('productos').select('id, stock, price, created_at, name'),
+  // Pedidos con productos
+  supabase.from('pedidos').select('id, status, precio_total, created_at, cliente_email, producto_id'),
   // Pedidos recientes (últimos 7 días)
   supabase
     .from('pedidos')
     .select('*')
     .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(10),
+  // Ventas de los últimos 30 días
+  getVentasPorDia()
 ]);
 
-const [productosResult, pedidosResult, pedidosRecientesResult] = statsPromises;
+const [productosResult, pedidosResult, pedidosRecientesResult, ventasUltimos30Dias] = statsPromises;
 
-// Calcular estadísticas
+// Calcular estadísticas avanzadas
 const productos = productosResult.data || [];
 const pedidos = pedidosResult.data || [];
 const pedidosRecientes = pedidosRecientesResult.data || [];
 
+// Agrupar ventas por día para el gráfico
+const ventasDiarias = agruparVentasPorDia(ventasUltimos30Dias);
+
+// Calcular métricas de productos más vendidos
+const productosVendidos = new Map();
+pedidos
+  .filter(p => p.status === 'completed')
+  .forEach(pedido => {
+    if (pedido.producto_id) {
+      productosVendidos.set(
+        pedido.producto_id, 
+        (productosVendidos.get(pedido.producto_id) || 0) + 1
+      );
+    }
+  });
+
 const stats = {
+  // Productos básicos
   totalProductos: productos.length,
-  productosEnStock: productos.filter(p => (p.stock || 0) > 0).length,
-  productosSinStock: productos.filter(p => (p.stock || 0) === 0).length,
-  valorInventario: productos.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0),
+  productosActivos: productos.filter(p => p.stock > 0).length,
+  productosEnStock: productos.filter(p => p.stock > 0).length,
+  productosSinStock: productos.filter(p => p.stock === 0).length,
+  stockBajo: productos.filter(p => p.stock > 0 && p.stock <= 5).length,
+  valorInventario: productos.reduce((sum, p) => sum + (p.price * p.stock), 0),
   
+  // Pedidos básicos
   totalPedidos: pedidos.length,
   pedidosPendientes: pedidos.filter(p => ['pendiente', 'pagado', 'enviado'].includes(p.status)).length,
   pedidosCompletados: pedidos.filter(p => p.status === 'entregado').length,
@@ -40,18 +93,66 @@ const stats = {
     .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
     .reduce((sum, p) => sum + (p.precio_total || 0), 0),
     
+  // Métricas de clientes
   clientesUnicos: new Set(pedidos.map(p => p.cliente_email).filter(Boolean)).size,
   pedidosHoy: pedidos.filter(p => {
     const today = new Date().toDateString();
     return new Date(p.created_at).toDateString() === today;
   }).length,
   
+  // Métricas de tiempo
   ventasSemana: pedidosRecientes
     .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
-    .reduce((sum, p) => sum + (p.precio_total || 0), 0)
+    .reduce((sum, p) => sum + (p.precio_total || 0), 0),
+    
+  // Métricas avanzadas
+  ticketPromedio: pedidos.length > 0 ? 
+    pedidos
+      .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
+      .reduce((sum, p) => sum + (p.precio_total || 0), 0) / 
+    pedidos.filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status)).length 
+    : 0,
+    
+  // Crecimiento (comparar con período anterior)
+  crecimientoVentas: 0, // Calcularemos esto más adelante
+  
+  // Conversión
+  tasaConversion: pedidos.length > 0 ? 
+    (pedidos.filter(p => p.status === 'entregado').length / pedidos.length) * 100 : 0,
+    
+  // Top productos (preparado para el gráfico)
+  topProductos: Array.from(productosVendidos.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([productoId, cantidad]) => ({
+      productoId,
+      cantidad,
+      producto: productos.find(p => p.id === productoId)
+    }))
 };
 
-function formatPrice(price: number) {
+// Preparar datos para gráficos
+const chartData = {
+  // Ventas por día (últimos 30 días)
+  ventasDiarias: ventasDiarias.slice(-30).map(v => ({
+    fecha: new Date(v.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
+    total: v.total
+  })),
+  
+  // Estado de pedidos
+  estadoPedidos: [
+    { estado: 'Pendientes', cantidad: stats.pedidosPendientes, color: '#FCD34D' },
+    { estado: 'Completados', cantidad: stats.pedidosCompletados, color: '#10B981' },
+    { estado: 'Cancelados', cantidad: pedidos.filter(p => p.status === 'cancelado').length, color: '#EF4444' }
+  ],
+  
+  // Top productos
+  topProductos: stats.topProductos.map(item => ({
+    nombre: item.producto?.name || 'Producto desconocido',
+    ventas: item.cantidad,
+    color: `hsl(${Math.random() * 360}, 70%, 50%)`
+  }))
+};function formatPrice(price: number) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP'
@@ -238,5 +339,179 @@ function formatPrice(price: number) {
       </div>
     </div>
 
+    <!-- Sección de Gráficos Interactivos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      
+      <!-- Gráfico de Ventas por Día -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-lg font-semibold text-gray-900">📈 Ventas Últimos 30 Días</h2>
+          <div class="text-sm text-gray-500">Ingresos diarios</div>
+        </div>
+        <div class="h-64">
+          <canvas id="ventasChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico de Estado de Pedidos -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-lg font-semibold text-gray-900">🎯 Estado de Pedidos</h2>
+          <div class="text-sm text-gray-500">Distribución actual</div>
+        </div>
+        <div class="h-64">
+          <canvas id="pedidosChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Productos Más Vendidos -->
+    <div class="bg-white rounded-lg shadow">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">🏆 Top 5 Productos Más Vendidos</h2>
+      </div>
+      
+      {stats.topProductos.length > 0 ? (
+        <div class="p-6">
+          <div class="space-y-4">
+            {stats.topProductos.map((item, index) => (
+              <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div class="flex items-center space-x-4">
+                  <div class="flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full font-bold text-sm">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div class="font-medium text-gray-900">{item.producto?.name || 'Producto sin nombre'}</div>
+                    <div class="text-sm text-gray-500">{item.cantidad} ventas</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-lg font-semibold text-gray-900">{item.cantidad}</div>
+                  <div class="text-sm text-gray-500">unidades</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div class="p-8 text-center text-gray-500">
+          <div class="text-4xl mb-4">📊</div>
+          <p>No hay datos de productos vendidos aún</p>
+        </div>
+      )}
+    </div>
+
+    <!-- Métricas Avanzadas -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      
+      <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow p-6 text-white">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm opacity-90">Ticket Promedio</div>
+            <div class="text-2xl font-bold">{formatPrice(stats.ticketPromedio)}</div>
+          </div>
+          <div class="text-3xl opacity-80">💰</div>
+        </div>
+      </div>
+
+      <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg shadow p-6 text-white">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm opacity-90">Valor Inventario</div>
+            <div class="text-2xl font-bold">{formatPrice(stats.valorInventario)}</div>
+          </div>
+          <div class="text-3xl opacity-80">📦</div>
+        </div>
+      </div>
+
+      <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg shadow p-6 text-white">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm opacity-90">Stock Bajo</div>
+            <div class="text-2xl font-bold">{stats.stockBajo}</div>
+            <div class="text-xs opacity-75">productos</div>
+          </div>
+          <div class="text-3xl opacity-80">⚠️</div>
+        </div>
+      </div>
+
+    </div>
+
   </div>
 </DashboardLayout>
+
+<!-- Script para los gráficos -->
+<script is:inline src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script is:inline define:vars={{ chartData }}>
+  document.addEventListener('DOMContentLoaded', function() {
+    
+    console.log('📊 Datos para gráficos:', chartData);
+
+    // Configuración del gráfico de ventas
+    const ventasCtx = document.getElementById('ventasChart');
+    if (ventasCtx) {
+      new Chart(ventasCtx, {
+        type: 'line',
+        data: {
+          labels: chartData.ventasDiarias.map(v => v.fecha),
+          datasets: [{
+            label: 'Ventas Diarias',
+            data: chartData.ventasDiarias.map(v => v.total),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '$' + value.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Configuración del gráfico de pedidos
+    const pedidosCtx = document.getElementById('pedidosChart');
+    if (pedidosCtx) {
+      new Chart(pedidosCtx, {
+        type: 'doughnut',
+        data: {
+          labels: chartData.estadoPedidos.map(e => e.estado),
+          datasets: [{
+            data: chartData.estadoPedidos.map(e => e.cantidad),
+            backgroundColor: chartData.estadoPedidos.map(e => e.color),
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom'
+            }
+          }
+        }
+      });
+    }
+
+    console.log('✅ Gráficos inicializados correctamente');
+  });
+</script>

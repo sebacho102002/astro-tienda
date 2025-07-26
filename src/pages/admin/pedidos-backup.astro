@@ -1,0 +1,693 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { supabase } from '../../lib/supabaseClient';
+
+// 📦 Obtener todos los pedidos con información completa
+let pedidos: any[] = [];
+let error: string | null = null;
+let estadisticas = {
+  total: 0,
+  pendientes: 0,
+  enPreparacion: 0,
+  enviados: 0,
+  entregados: 0,
+  cancelados: 0,
+  ingresos: 0,
+  promedioCalificacion: 0
+};
+
+try {
+  const { data, error: pedidosError } = await supabase
+    .from('pedidos')
+    .select(`
+      *,
+      productos:producto_id (
+        id,
+        title,
+        sku,
+        price,
+        images
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (pedidosError) {
+    throw pedidosError;
+  }
+
+  pedidos = data || [];
+  
+  // Calcular estadísticas mejoradas
+  estadisticas = {
+    total: pedidos.length,
+    pendientes: pedidos.filter(p => p.status === 'pendiente').length,
+    enPreparacion: pedidos.filter(p => ['pagado', 'confirmado', 'preparando'].includes(p.status)).length,
+    enviados: pedidos.filter(p => ['enviado', 'en_transito'].includes(p.status)).length,
+    entregados: pedidos.filter(p => p.status === 'entregado').length,
+    cancelados: pedidos.filter(p => p.status === 'cancelado').length,
+    ingresos: pedidos
+      .filter(p => ['pagado', 'confirmado', 'preparando', 'enviado', 'en_transito', 'entregado'].includes(p.status))
+      .reduce((sum, p) => sum + (p.total || 0), 0),
+    promedioCalificacion: 0 // Se calculará con las calificaciones
+  };
+  
+  // Obtener calificaciones promedio
+  const { data: calificaciones } = await supabase
+    .from('pedidos_calificaciones')
+    .select('calificacion')
+    .eq('aspecto_calificado', 'general');
+  
+  if (calificaciones && calificaciones.length > 0) {
+    estadisticas.promedioCalificacion = calificaciones.reduce((sum, c) => sum + c.calificacion, 0) / calificaciones.length;
+  }
+  
+} catch (e: any) {
+  console.error('Error cargando pedidos:', e);
+  error = e instanceof Error ? e.message : 'Error desconocido';
+}
+
+// Función para obtener el color del estado
+function getEstadoColor(estado: string) {
+  const colores = {
+    'pendiente': 'bg-yellow-100 text-yellow-800',
+    'pagado': 'bg-blue-100 text-blue-800',
+    'confirmado': 'bg-blue-100 text-blue-800',
+    'preparando': 'bg-orange-100 text-orange-800',
+    'enviado': 'bg-indigo-100 text-indigo-800',
+    'en_transito': 'bg-indigo-100 text-indigo-800',
+    'entregado': 'bg-green-100 text-green-800',
+    'cancelado': 'bg-red-100 text-red-800',
+    'devuelto': 'bg-gray-100 text-gray-800'
+  };
+  return colores[estado as keyof typeof colores] || 'bg-gray-100 text-gray-800';
+}
+
+// Función para obtener el texto amigable del estado
+function getEstadoTexto(estado: string) {
+  const textos = {
+    'pendiente': 'Pendiente',
+    'pagado': 'Pagado',
+    'confirmado': 'Confirmado',
+    'preparando': 'Preparando',
+    'enviado': 'Enviado',
+    'en_transito': 'En Tránsito',
+    'entregado': 'Entregado',
+    'cancelado': 'Cancelado',
+    'devuelto': 'Devuelto'
+  };
+  return textos[estado as keyof typeof textos] || estado;
+}
+
+// Función para formatear precio
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+---
+
+<DashboardLayout title="Gestión de Pedidos">
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">📦 Pedidos</h1>
+        <p class="text-gray-600">Administra todos los pedidos y pagos</p>
+      </div>
+      
+      <!-- Estadísticas mejoradas -->
+      <div class="grid grid-cols-6 gap-3">
+        <div class="bg-blue-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-blue-700">{estadisticas.total}</div>
+          <div class="text-xs text-blue-600">Total</div>
+        </div>
+        <div class="bg-yellow-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-yellow-700">{estadisticas.pendientes}</div>
+          <div class="text-xs text-yellow-600">Pendientes</div>
+        </div>
+        <div class="bg-orange-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-orange-700">{estadisticas.enPreparacion}</div>
+          <div class="text-xs text-orange-600">Preparando</div>
+        </div>
+        <div class="bg-indigo-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-indigo-700">{estadisticas.enviados}</div>
+          <div class="text-xs text-indigo-600">Enviados</div>
+        </div>
+        <div class="bg-green-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-green-700">{estadisticas.entregados}</div>
+          <div class="text-xs text-green-600">Entregados</div>
+        </div>
+        <div class="bg-purple-50 p-3 rounded-lg text-center">
+          <div class="text-lg font-bold text-purple-700">
+            {formatPrice(estadisticas.ingresos)}
+          </div>
+          <div class="text-xs text-purple-600">Ingresos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error handling -->
+    {error && (
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <h3 class="text-red-800 font-semibold">Error cargando pedidos</h3>
+        <p class="text-red-700 text-sm">{error}</p>
+      </div>
+    )}
+
+    <!-- Lista de pedidos -->
+    {!error && (
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Lista de Pedidos ({pedidos.length})
+          </h2>
+        </div>
+
+        {pedidos.length === 0 ? (
+          <div class="p-8 text-center text-gray-500">
+            <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              📦
+            </div>
+            <p>No hay pedidos registrados</p>
+            <p class="text-sm mt-2">Los pedidos aparecerán aquí cuando los clientes realicen compras</p>
+          </div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pedido
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cliente
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Seguimiento
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {pedidos.map((pedido: any) => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}
+                      </div>
+                      <div class="text-xs text-gray-500">
+                        {pedido.metodo_pago}
+                      </div>
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {pedido.cliente_nombre}
+                      </div>
+                      <div class="text-xs text-gray-500">
+                        {pedido.cliente_email}
+                      </div>
+                      {pedido.cliente_telefono && (
+                        <div class="text-xs text-gray-500">
+                          📞 {pedido.cliente_telefono}
+                        </div>
+                      )}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        {pedido.productos?.images?.[0] && (
+                          <img 
+                            class="h-8 w-8 rounded object-cover mr-2" 
+                            src={pedido.productos.images[0]} 
+                            alt={pedido.productos?.title}
+                          />
+                        )}
+                        <div>
+                          <div class="text-xs font-medium text-gray-900">
+                            {pedido.productos?.title || 'Producto eliminado'}
+                          </div>
+                          <div class="text-xs text-gray-500">
+                            SKU: {pedido.productos?.sku || 'N/A'} • Qty: {pedido.cantidad}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <div class="text-sm font-medium text-gray-900">
+                        {formatPrice(pedido.precio_total)}
+                      </div>
+                      <div class="text-xs text-gray-500">
+                        {formatPrice(pedido.precio_unitario)} × {pedido.cantidad}
+                      </div>
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(pedido.status || pedido.estado)}`}>
+                        {getEstadoTexto(pedido.status || pedido.estado)}
+                      </span>
+                      {pedido.payment_status && (
+                        <div class="text-xs text-gray-500 mt-1">
+                          Pay: {pedido.payment_status}
+                        </div>
+                      )}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      <div class="text-xs font-medium text-blue-600">
+                        {pedido.numero_seguimiento || 'Sin asignar'}
+                      </div>
+                      {pedido.numero_guia && (
+                        <div class="text-xs text-gray-500">
+                          Guía: {pedido.numero_guia}
+                        </div>
+                      )}
+                      {pedido.transportadora && (
+                        <div class="text-xs text-gray-500">
+                          {pedido.transportadora}
+                        </div>
+                      )}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-xs text-gray-500">
+                      {new Date(pedido.created_at).toLocaleDateString('es-ES', {
+                        year: '2-digit',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td class="px-4 py-4 whitespace-nowrap text-xs font-medium">
+                      <div class="flex flex-col space-y-1">
+                        <button 
+                          class="text-blue-600 hover:text-blue-900 text-left"
+                          onclick={`verDetallesPedido('${pedido.id}')`}
+                        >
+                          👁️ Ver Detalles
+                        </button>
+                        <button 
+                          class="text-green-600 hover:text-green-900 text-left"
+                          onclick={`actualizarEstado('${pedido.id}', '${pedido.status || pedido.estado}')`}
+                        >
+                          ✏️ Actualizar Estado
+                        </button>
+                        <button 
+                          class="text-purple-600 hover:text-purple-900 text-left"
+                          onclick={`gestionarEntrega('${pedido.id}')`}
+                        >
+                          🚛 Gestionar Entrega
+                        </button>
+                        {pedido.status !== 'entregado' && (
+                          <button 
+                            class="text-red-600 hover:text-red-900 text-left"
+                            onclick={`eliminarPedido('${pedido.id}', '${pedido.numero_pedido || pedido.id.slice(0, 8)}', event)`}
+                          >
+                            🗑️ Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+
+  <!-- Modal para actualizar estado -->
+  <div id="modal-estado" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+    <div class="flex items-center justify-center min-h-full p-4">
+      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-lg font-semibold mb-4">Actualizar Estado del Pedido</h3>
+        <select id="nuevo-estado" class="w-full p-2 border border-gray-300 rounded-lg mb-4">
+          <option value="pendiente">⏳ Pendiente</option>
+          <option value="pagado">💳 Pagado</option>
+          <option value="confirmado">✅ Confirmado</option>
+          <option value="preparando">📦 Preparando</option>
+          <option value="enviado">🚛 Enviado</option>
+          <option value="en_transito">🛣️ En Tránsito</option>
+          <option value="entregado">✅ Entregado</option>
+          <option value="cancelado">❌ Cancelado</option>
+          <option value="devuelto">🔄 Devuelto</option>
+        </select>
+        <textarea 
+          id="observaciones-estado" 
+          placeholder="Observaciones (opcional)" 
+          class="w-full p-2 border border-gray-300 rounded-lg mb-4 h-20 resize-none"
+        ></textarea>
+        <div class="flex space-x-3">
+          <button 
+            onclick="cerrarModal('modal-estado')"
+            class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+          >
+            Cancelar
+          </button>
+          <button 
+            onclick="confirmarActualizacion()"
+            class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
+          >
+            Actualizar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para gestionar entrega -->
+  <div id="modal-entrega" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+    <div class="flex items-center justify-center min-h-full p-4">
+      <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+        <h3 class="text-lg font-semibold mb-4">🚛 Gestionar Entrega</h3>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Transportadora</label>
+            <select id="transportadora" class="w-full p-2 border border-gray-300 rounded-lg">
+              <option value="">Seleccionar transportadora</option>
+              <option value="Servientrega">Servientrega</option>
+              <option value="Coordinadora">Coordinadora</option>
+              <option value="TCC">TCC</option>
+              <option value="Interrapidisimo">Interrapidísimo</option>
+              <option value="Entrega Propia">Entrega Propia</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Número de Guía</label>
+            <input 
+              type="text" 
+              id="numero-guia" 
+              placeholder="Ingresa el número de guía"
+              class="w-full p-2 border border-gray-300 rounded-lg"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fecha Estimada de Entrega</label>
+            <input 
+              type="date" 
+              id="fecha-estimada" 
+              class="w-full p-2 border border-gray-300 rounded-lg"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Dirección de Entrega</label>
+            <textarea 
+              id="direccion-entrega" 
+              placeholder="Dirección completa de entrega"
+              class="w-full p-2 border border-gray-300 rounded-lg h-20 resize-none"
+            ></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Notas de Entrega</label>
+            <textarea 
+              id="notas-entrega" 
+              placeholder="Notas especiales para la entrega"
+              class="w-full p-2 border border-gray-300 rounded-lg h-16 resize-none"
+            ></textarea>
+          </div>
+        </div>
+        
+        <div class="flex space-x-3 mt-6">
+          <button 
+            onclick="cerrarModal('modal-entrega')"
+            class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+          >
+            Cancelar
+          </button>
+          <button 
+            onclick="confirmarGestionEntrega()"
+            class="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700"
+          >
+            Guardar Entrega
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para ver detalles completos -->
+  <div id="modal-detalles" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+    <div class="flex items-center justify-center min-h-full p-4">
+      <div class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-xl font-semibold">📦 Detalles Completos del Pedido</h3>
+          <button onclick="cerrarModal('modal-detalles')" class="text-gray-500 hover:text-gray-700">
+            ✕
+          </button>
+        </div>
+        <div id="contenido-detalles">
+          <!-- Se llenará dinámicamente -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ pedidos }}>
+    let pedidoIdActual = '';
+    
+    async function verDetallesPedido(pedidoId) {
+      pedidoIdActual = pedidoId;
+      const pedido = pedidos.find(p => p.id === pedidoId);
+      
+      if (!pedido) {
+        alert('Pedido no encontrado');
+        return;
+      }
+
+      try {
+        // Obtener historial y detalles completos
+        const response = await fetch(`/api/pedidos/detalles?id=${pedidoId}`);
+        const data = await response.json();
+        
+        let contenido = `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Información del Pedido -->
+            <div class="space-y-4">
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">📋 Información del Pedido</h4>
+                <div class="space-y-2 text-sm">
+                  <div><strong>Número:</strong> ${pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}</div>
+                  <div><strong>Seguimiento:</strong> <span class="text-blue-600">${pedido.numero_seguimiento || 'Sin asignar'}</span></div>
+                  <div><strong>Estado:</strong> <span class="px-2 py-1 rounded-full text-xs ${getEstadoColorJS(pedido.status || pedido.estado)}">${getEstadoTextoJS(pedido.status || pedido.estado)}</span></div>
+                  <div><strong>Método de Pago:</strong> ${pedido.metodo_pago}</div>
+                  <div><strong>Total:</strong> ${formatPriceJS(pedido.precio_total)}</div>
+                </div>
+              </div>
+
+              <!-- Información del Cliente -->
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">👤 Información del Cliente</h4>
+                <div class="space-y-2 text-sm">
+                  <div><strong>Nombre:</strong> ${pedido.cliente_nombre}</div>
+                  <div><strong>Email:</strong> ${pedido.cliente_email}</div>
+                  <div><strong>Teléfono:</strong> ${pedido.cliente_telefono || 'No proporcionado'}</div>
+                  <div><strong>Dirección:</strong> ${pedido.direccion_envio || pedido.direccion_entrega || 'No proporcionado'}</div>
+                </div>
+              </div>
+
+              <!-- Información de Entrega -->
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">🚛 Información de Entrega</h4>
+                <div class="space-y-2 text-sm">
+                  <div><strong>Transportadora:</strong> ${pedido.transportadora || 'No asignada'}</div>
+                  <div><strong>Número de Guía:</strong> ${pedido.numero_guia || 'No asignado'}</div>
+                  <div><strong>Fecha Estimada:</strong> ${pedido.fecha_estimada_entrega ? new Date(pedido.fecha_estimada_entrega).toLocaleDateString('es-ES') : 'No asignada'}</div>
+                  <div><strong>Fecha Real:</strong> ${pedido.fecha_entrega_real ? new Date(pedido.fecha_entrega_real).toLocaleDateString('es-ES') : 'Pendiente'}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Producto e Historial -->
+            <div class="space-y-4">
+              <!-- Producto -->
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">🛍️ Producto</h4>
+                <div class="flex items-start space-x-3">
+                  ${pedido.productos?.images?.[0] ? `<img src="${pedido.productos.images[0]}" alt="${pedido.productos.title}" class="w-16 h-16 object-cover rounded">` : ''}
+                  <div class="flex-1 space-y-1 text-sm">
+                    <div><strong>${pedido.productos?.title || 'Producto eliminado'}</strong></div>
+                    <div>SKU: ${pedido.productos?.sku || 'N/A'}</div>
+                    <div>Cantidad: ${pedido.cantidad}</div>
+                    <div>Precio unitario: ${formatPriceJS(pedido.precio_unitario)}</div>
+                    <div><strong>Subtotal: ${formatPriceJS(pedido.precio_total)}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Historial de Estados -->
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">� Historial de Estados</h4>
+                <div id="historial-container" class="space-y-2 text-sm">
+                  <div class="text-gray-500">Cargando historial...</div>
+                </div>
+              </div>
+              
+              <!-- Calificaciones -->
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <h4 class="font-semibold text-gray-900 mb-3">⭐ Calificaciones</h4>
+                <div id="calificaciones-container" class="space-y-2 text-sm">
+                  <div class="text-gray-500">Sin calificaciones aún</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        document.getElementById('contenido-detalles').innerHTML = contenido;
+        
+        // Cargar historial
+        cargarHistorialPedido(pedidoId);
+        
+        // Mostrar modal
+        document.getElementById('modal-detalles').classList.remove('hidden');
+        
+      } catch (error) {
+        console.error('Error cargando detalles:', error);
+        alert('Error cargando detalles del pedido');
+      }
+
+📊 ESTADO: ${pedido.estado.toUpperCase()}
+💳 Método de pago: ${pedido.metodo_pago}
+📅 Fecha: ${new Date(pedido.created_at).toLocaleDateString('es-ES')}
+        `;
+        
+        alert(detalles);
+      } else {
+        alert('❌ No se encontraron los detalles del pedido');
+      }
+    }
+    
+    function actualizarEstado(pedidoId, estadoActual) {
+      pedidoIdActual = pedidoId;
+      const modal = document.getElementById('modal-estado');
+      const select = document.getElementById('nuevo-estado');
+      
+      if (modal && select) {
+        select.value = estadoActual;
+        modal.classList.remove('hidden');
+        modal.querySelector('.flex')?.classList.add('flex');
+      }
+    }
+    
+    function cerrarModal() {
+      const modal = document.getElementById('modal-estado');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.querySelector('.flex')?.classList.remove('flex');
+      }
+    }
+    
+    async function confirmarActualizacion() {
+      const nuevoEstado = document.getElementById('nuevo-estado')?.value;
+      
+      if (!nuevoEstado || !pedidoIdActual) return;
+      
+      try {
+        const response = await fetch('/api/pedidos/update-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pedidoId: pedidoIdActual,
+            nuevoEstado: nuevoEstado
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          alert(`✅ ${result.message}`);
+          cerrarModal();
+          
+          // Recargar la página para mostrar los cambios
+          window.location.reload();
+        } else {
+          throw new Error(result.error || 'Error al actualizar el pedido');
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
+
+    // Nueva función para eliminar pedidos
+    async function eliminarPedido(id, numeroPedido, event) {
+      const confirmMessage = `¿Estás seguro de que quieres eliminar el pedido #${numeroPedido}?\n\n⚠️ IMPORTANTE:\n• Esta acción no se puede deshacer\n• Se eliminará permanentemente de la base de datos\n• Los pedidos entregados no se pueden eliminar (se conservan para el historial)`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Mostrar indicador de carga
+      const button = event.target;
+      const originalText = button.innerHTML;
+      button.innerHTML = '⏳ Eliminando...';
+      button.disabled = true;
+      button.style.opacity = '0.6';
+
+      try {
+        console.log('🗑️ Enviando solicitud de eliminación para pedido:', id);
+        
+        const response = await fetch('/api/pedidos/delete', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id })
+        });
+
+        console.log('📡 Respuesta del servidor:', response.status);
+        const data = await response.json();
+
+        if (response.ok) {
+          console.log('✅ Pedido eliminado:', data);
+          alert(`✅ ${data.message}`);
+          location.reload();
+          
+        } else if (response.status === 409) {
+          // Pedido no se puede eliminar
+          console.warn('⚠️ Pedido protegido:', data);
+          alert(`⚠️ ${data.error}\n\n💡 ${data.warning || ''}`);
+          
+        } else {
+          // Otros errores
+          console.error('❌ Error del servidor:', data);
+          alert(`❌ Error: ${data.error || 'No se pudo eliminar el pedido'}\n\nDetalles: ${data.details || 'Error desconocido'}`);
+        }
+      } catch (error) {
+        console.error('❌ Error de red:', error);
+        alert('❌ Error de conexión\n\nNo se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.');
+      } finally {
+        // Restaurar botón
+        button.innerHTML = originalText;
+        button.disabled = false;
+        button.style.opacity = '1';
+      }
+    }
+  </script>
+</DashboardLayout>

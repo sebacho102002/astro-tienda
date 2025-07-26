@@ -7,6 +7,9 @@ import { getSessionFromToken } from '../../lib/auth';
 const cookieHeader = Astro.request.headers.get('cookie') || '';
 console.log('🍪 Cookie header debug:', cookieHeader);
 
+// Obtener sesión del middleware
+const middlewareUser = (Astro.locals as any)?.user || null;
+
 let userSession: any = null;
 let jwtToken = '';
 let tokenValid = false;
@@ -62,6 +65,29 @@ try {
         </div>
       </div>
     </div>
+
+    {middlewareUser && (
+      <div class="bg-white rounded-lg shadow p-6 mt-6">
+        <h3 class="text-lg font-semibold mb-4">🔐 Usuario (Middleware)</h3>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <strong>ID:</strong> {middlewareUser.id}
+          </div>
+          <div>
+            <strong>Email:</strong> {middlewareUser.email}
+          </div>
+          <div>
+            <strong>Nombre:</strong> {middlewareUser.name}
+          </div>
+          <div>
+            <strong>Rol:</strong> {middlewareUser.role}
+          </div>
+          <div>
+            <strong>Session ID:</strong> {middlewareUser.sessionId}
+          </div>
+        </div>
+      </div>
+    )}
 
     {userSession && (
       <div class="bg-white rounded-lg shadow p-6 mt-6">

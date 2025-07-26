@@ -2,18 +2,24 @@
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { supabase } from '../../lib/supabaseClient';
 
-// 📦 Obtener todos los pedidos con información del producto
+// 📦 Obtener todos los pedidos con información completa
 let pedidos: any[] = [];
+let productos: any[] = [];
 let error: string | null = null;
 let estadisticas = {
   total: 0,
   pendientes: 0,
-  completados: 0,
+  confirmados: 0,
+  preparando: 0,
+  enviados: 0,
+  entregados: 0,
+  cancelados: 0,
   ingresos: 0
 };
 
 try {
-  const { data, error: pedidosError } = await supabase
+  // Obtener pedidos
+  const { data: pedidosData, error: pedidosError } = await supabase
     .from('pedidos')
     .select(`
       *,
@@ -27,37 +33,35 @@ try {
     `)
     .order('created_at', { ascending: false });
 
-  if (pedidosError) {
-    throw pedidosError;
-  }
+  if (pedidosError) throw pedidosError;
+  pedidos = pedidosData || [];
 
-  pedidos = data || [];
+  // Obtener productos para el formulario de nuevo pedido
+  const { data: productosData, error: productosError } = await supabase
+    .from('productos')
+    .select('id, title, price, sku')
+    .order('title');
+
+  if (productosError) throw productosError;
+  productos = productosData || [];
   
   // Calcular estadísticas
   estadisticas = {
     total: pedidos.length,
-    pendientes: pedidos.filter(p => ['pendiente', 'pagado', 'enviado'].includes(p.status)).length,
-    completados: pedidos.filter(p => p.status === 'entregado').length,
+    pendientes: pedidos.filter(p => (p.status || p.estado) === 'pendiente').length,
+    confirmados: pedidos.filter(p => (p.status || p.estado) === 'confirmado').length,
+    preparando: pedidos.filter(p => (p.status || p.estado) === 'preparando').length,
+    enviados: pedidos.filter(p => (p.status || p.estado) === 'enviado').length,
+    entregados: pedidos.filter(p => (p.status || p.estado) === 'entregado').length,
+    cancelados: pedidos.filter(p => (p.status || p.estado) === 'cancelado').length,
     ingresos: pedidos
-      .filter(p => ['pagado', 'enviado', 'entregado'].includes(p.status))
-      .reduce((sum, p) => sum + (p.total || 0), 0)
+      .filter(p => !['cancelado', 'pendiente'].includes(p.status || p.estado))
+      .reduce((sum, p) => sum + (p.precio_total || p.total || 0), 0)
   };
-  
-} catch (e: any) {
-  console.error('Error cargando pedidos:', e);
-  error = e instanceof Error ? e.message : 'Error desconocido';
-}
 
-// Función para obtener el color del estado
-function getEstadoColor(estado: string) {
-  switch (estado) {
-    case 'pendiente': return 'bg-yellow-100 text-yellow-800';
-    case 'pagado': return 'bg-green-100 text-green-800';
-    case 'enviado': return 'bg-blue-100 text-blue-800';
-    case 'entregado': return 'bg-purple-100 text-purple-800';
-    case 'cancelado': return 'bg-red-100 text-red-800';
-    default: return 'bg-gray-100 text-gray-800';
-  }
+} catch (e: any) {
+  error = e.message || 'Error al cargar los datos';
+  console.error('❌ Error en pedidos.astro:', e);
 }
 
 // Función para formatear precio
@@ -67,6 +71,30 @@ function formatPrice(price: number) {
     currency: 'COP'
   }).format(price);
 }
+
+// Función para obtener el color del estado
+function getStatusColor(status: string) {
+  const colors: Record<string, string> = {
+    'pendiente': 'bg-yellow-100 text-yellow-800',
+    'confirmado': 'bg-blue-100 text-blue-800',
+    'preparando': 'bg-orange-100 text-orange-800',
+    'enviado': 'bg-indigo-100 text-indigo-800',
+    'entregado': 'bg-green-100 text-green-800',
+    'cancelado': 'bg-red-100 text-red-800'
+  };
+  return colors[status] || 'bg-gray-100 text-gray-800';
+}
+
+// Función para formatear método de pago
+function formatMetodoPago(metodo: string) {
+  const metodos: Record<string, string> = {
+    'mercadopago': '💳 MercadoPago',
+    'whatsapp': '📱 WhatsApp',
+    'efectivo': '💵 Efectivo',
+    'transferencia': '🏦 Transferencia'
+  };
+  return metodos[metodo] || metodo;
+}
 ---
 
 <DashboardLayout title="Gestión de Pedidos">
@@ -75,381 +103,449 @@ function formatPrice(price: number) {
     <div class="flex justify-between items-center">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">📦 Pedidos</h1>
-        <p class="text-gray-600">Administra todos los pedidos y pagos</p>
+        <p class="text-gray-600">Administra todos los pedidos (web y WhatsApp)</p>
       </div>
       
-      <!-- Estadísticas mejoradas -->
-      <div class="grid grid-cols-4 gap-4">
-        <div class="bg-blue-50 p-4 rounded-lg text-center">
-          <div class="text-2xl font-bold text-blue-700">{estadisticas.total}</div>
-          <div class="text-sm text-blue-600">Total Pedidos</div>
-        </div>
-        <div class="bg-yellow-50 p-4 rounded-lg text-center">
-          <div class="text-2xl font-bold text-yellow-700">{estadisticas.pendientes}</div>
-          <div class="text-sm text-yellow-600">En Proceso</div>
-        </div>
-        <div class="bg-green-50 p-4 rounded-lg text-center">
-          <div class="text-2xl font-bold text-green-700">{estadisticas.completados}</div>
-          <div class="text-sm text-green-600">Completados</div>
-        </div>
-        <div class="bg-purple-50 p-4 rounded-lg text-center">
-          <div class="text-2xl font-bold text-purple-700">
-            {formatPrice(estadisticas.ingresos)}
-          </div>
-          <div class="text-sm text-purple-600">Ingresos</div>
-        </div>
+      <!-- Botón para agregar pedido manual -->
+      <button 
+        onclick="window.toggleNuevoPedido()"
+        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+      >
+        <span>➕</span>
+        Nuevo Pedido (WhatsApp)
+      </button>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="grid grid-cols-7 gap-3">
+      <div class="bg-blue-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-blue-700">{estadisticas.total}</div>
+        <div class="text-xs text-blue-600">Total</div>
       </div>
-        <div class="bg-purple-50 p-3 rounded-lg text-center">
-          <div class="text-lg font-bold text-purple-700">
-            {pedidos.filter(p => p.estado === 'entregado').length}
-          </div>
-          <div class="text-xs text-purple-600">Entregados</div>
+      <div class="bg-yellow-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-yellow-700">{estadisticas.pendientes}</div>
+        <div class="text-xs text-yellow-600">Pendientes</div>
+      </div>
+      <div class="bg-blue-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-blue-700">{estadisticas.confirmados}</div>
+        <div class="text-xs text-blue-600">Confirmados</div>
+      </div>
+      <div class="bg-orange-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-orange-700">{estadisticas.preparando}</div>
+        <div class="text-xs text-orange-600">Preparando</div>
+      </div>
+      <div class="bg-indigo-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-indigo-700">{estadisticas.enviados}</div>
+        <div class="text-xs text-indigo-600">Enviados</div>
+      </div>
+      <div class="bg-green-50 p-3 rounded-lg text-center">
+        <div class="text-xl font-bold text-green-700">{estadisticas.entregados}</div>
+        <div class="text-xs text-green-600">Entregados</div>
+      </div>
+      <div class="bg-purple-50 p-3 rounded-lg text-center">
+        <div class="text-lg font-bold text-purple-700">
+          {formatPrice(estadisticas.ingresos)}
         </div>
+        <div class="text-xs text-purple-600">Ingresos</div>
       </div>
     </div>
 
     <!-- Error handling -->
     {error && (
-      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-        <h3 class="text-red-800 font-semibold">Error cargando pedidos</h3>
-        <p class="text-red-700 text-sm">{error}</p>
+      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <strong>Error:</strong> {error}
       </div>
     )}
 
-    <!-- Lista de pedidos -->
-    {!error && (
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">
-            Lista de Pedidos ({pedidos.length})
-          </h2>
+    <!-- Formulario para nuevo pedido (inicialmente oculto) -->
+    <div id="formNuevoPedido" class="hidden bg-white border-2 border-green-200 rounded-lg p-6">
+      <h2 class="text-lg font-semibold mb-4 text-green-800">📱 Nuevo Pedido de WhatsApp</h2>
+      
+      <form id="nuevoPedidoForm" class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Producto</label>
+          <select name="producto_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+            <option value="">Seleccionar producto...</option>
+            {productos.map(producto => (
+              <option value={producto.id} data-price={producto.price}>
+                {producto.title} - {formatPrice(producto.price)} ({producto.sku})
+              </option>
+            ))}
+          </select>
         </div>
 
-        {pedidos.length === 0 ? (
-          <div class="p-8 text-center text-gray-500">
-            <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-              📦
-            </div>
-            <p>No hay pedidos registrados</p>
-            <p class="text-sm mt-2">Los pedidos aparecerán aquí cuando los clientes realicen compras</p>
-          </div>
-        ) : (
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pedido
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cliente
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Producto
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                {pedidos.map((pedido: any) => (
-                  <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="text-sm font-medium text-gray-900">
-                        {pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}
-                      </div>
-                      <div class="text-sm text-gray-500">
-                        {pedido.metodo_pago}
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="text-sm font-medium text-gray-900">
-                        {pedido.cliente_nombre}
-                      </div>
-                      <div class="text-sm text-gray-500">
-                        {pedido.cliente_email}
-                      </div>
-                      {pedido.cliente_telefono && (
-                        <div class="text-sm text-gray-500">
-                          📞 {pedido.cliente_telefono}
-                        </div>
-                      )}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="flex items-center">
-                        {pedido.productos?.images?.[0] && (
-                          <img 
-                            class="h-10 w-10 rounded object-cover mr-3" 
-                            src={pedido.productos.images[0]} 
-                            alt={pedido.productos?.title}
-                          />
-                        )}
-                        <div>
-                          <div class="text-sm font-medium text-gray-900">
-                            {pedido.productos?.title || 'Producto eliminado'}
-                          </div>
-                          <div class="text-sm text-gray-500">
-                            SKU: {pedido.productos?.sku || 'N/A'} • Qty: {pedido.cantidad}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <div class="text-sm font-medium text-gray-900">
-                        {formatPrice(pedido.precio_total)}
-                      </div>
-                      <div class="text-sm text-gray-500">
-                        {formatPrice(pedido.precio_unitario)} × {pedido.cantidad}
-                      </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                      <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(pedido.estado)}`}>
-                        {pedido.estado}
-                      </span>
-                      {pedido.payment_status && (
-                        <div class="text-xs text-gray-500 mt-1">
-                          Pay: {pedido.payment_status}
-                        </div>
-                      )}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(pedido.created_at).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button 
-                        class="text-blue-600 hover:text-blue-900"
-                        onclick={`verDetallesPedido('${pedido.id}')`}
-                      >
-                        👁️ Ver
-                      </button>
-                      <button 
-                        class="text-green-600 hover:text-green-900"
-                        onclick={`actualizarEstado('${pedido.id}', '${pedido.status || pedido.estado}')`}
-                      >
-                        ✏️ Estado
-                      </button>
-                      {pedido.status !== 'entregado' && (
-                        <button 
-                          class="text-red-600 hover:text-red-900"
-                          onclick={`eliminarPedido('${pedido.id}', '${pedido.numero_pedido || pedido.id.slice(0, 8)}', event)`}
-                        >
-                          🗑️ Eliminar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Cantidad</label>
+          <input 
+            type="number" 
+            name="cantidad" 
+            min="1" 
+            value="1" 
+            required 
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            oninput="window.calcularTotal()"
+          >
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Nombre del Cliente</label>
+          <input 
+            type="text" 
+            name="cliente_nombre" 
+            required 
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Teléfono</label>
+          <input 
+            type="tel" 
+            name="cliente_telefono" 
+            required 
+            placeholder="300-123-4567"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Email (opcional)</label>
+          <input 
+            type="email" 
+            name="cliente_email" 
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          >
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">Total</label>
+          <input 
+            type="number" 
+            name="precio_total" 
+            readonly 
+            class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
+          >
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700">Dirección de Envío</label>
+          <textarea 
+            name="direccion_envio" 
+            required 
+            rows="2"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          ></textarea>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700">Notas Adicionales</label>
+          <textarea 
+            name="notas_admin" 
+            rows="2"
+            placeholder="Notas internas sobre el pedido..."
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+          ></textarea>
+        </div>
+
+        <div class="col-span-2 flex gap-4">
+          <button 
+            type="submit" 
+            class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors"
+          >
+            ✅ Crear Pedido
+          </button>
+          <button 
+            type="button" 
+            onclick="toggleNuevoPedido()" 
+            class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors"
+          >
+            ❌ Cancelar
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Lista de pedidos -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Pedido
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Cliente
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Producto
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Total
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {pedidos.map((pedido) => (
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">
+                    #{pedido.numero_seguimiento || 'Sin número'}
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    {formatMetodoPago(pedido.metodo_pago || 'N/A')}
+                  </div>
+                  <div class="text-xs text-gray-400">
+                    {new Date(pedido.created_at).toLocaleDateString('es-CO')}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">
+                    {pedido.cliente_nombre}
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    {pedido.cliente_telefono}
+                  </div>
+                  {pedido.cliente_email && (
+                    <div class="text-sm text-gray-500">
+                      {pedido.cliente_email}
+                    </div>
+                  )}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm font-medium text-gray-900">
+                    {pedido.productos?.title || 'Producto eliminado'}
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    Cantidad: {pedido.cantidad}
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    SKU: {pedido.productos?.sku || 'N/A'}
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(pedido.status || pedido.estado)}`}>
+                    {pedido.status || pedido.estado}
+                  </span>
+                  {pedido.numero_guia && (
+                    <div class="text-xs text-gray-500 mt-1">
+                      Guía: {pedido.numero_guia}
+                    </div>
+                  )}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {formatPrice(pedido.precio_total || pedido.total || 0)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <div class="flex gap-2">
+                    <button 
+                      onclick={`window.actualizarEstado('${pedido.id}', '${pedido.status || pedido.estado}')`}
+                      class="text-blue-600 hover:text-blue-900 text-xs"
+                    >
+                      ✏️ Estado
+                    </button>
+                    <button 
+                      onclick={`window.eliminarPedido('${pedido.id}')`}
+                      class="text-red-600 hover:text-red-900 text-xs"
+                    >
+                      🗑️ Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {pedidos.length === 0 && !error && (
+      <div class="text-center py-12">
+        <div class="text-gray-500 text-lg">📦 No hay pedidos aún</div>
+        <p class="text-gray-400 mt-2">Los pedidos aparecerán aquí cuando se realicen</p>
+        <div class="mt-4">
+          <button 
+            onclick="toggleNuevoPedido()"
+            class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg"
+          >
+            ➕ Crear Primer Pedido
+          </button>
+        </div>
       </div>
     )}
   </div>
 
-  <!-- Modal para actualizar estado -->
-  <div id="modal-estado" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
-    <div class="flex items-center justify-center min-h-full p-4">
-      <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-      <h3 class="text-lg font-semibold mb-4">Actualizar Estado del Pedido</h3>
-      <select id="nuevo-estado" class="w-full p-2 border border-gray-300 rounded-lg mb-4">
-        <option value="pendiente">Pendiente</option>
-        <option value="pagado">Pagado</option>
-        <option value="enviado">Enviado</option>
-        <option value="entregado">Entregado</option>
-        <option value="cancelado">Cancelado</option>
-      </select>
-      <div class="flex space-x-3">
-        <button 
-          onclick="cerrarModal()"
-          class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
-        >
-          Cancelar
-        </button>
-        <button 
-          onclick="confirmarActualizacion()"
-          class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-        >
-          Actualizar
-        </button>
-      </div>
-    </div>
-  </div>
-
-  </div>
-      </div>
-    </div>
-  </div>
-
-  <script define:vars={{ pedidos }}>
-    let pedidoIdActual = '';
+  <script>
+    // 🌍 FUNCIONES GLOBALES (asignadas a window para acceso desde onclick)
     
-    function verDetallesPedido(pedidoId) {
-      // Buscar el pedido en los datos actuales
-      const pedido = pedidos.find(p => p.id === pedidoId);
-      
-      if (pedido) {
-        const formatPrice = (price) => new Intl.NumberFormat('es-CO', { 
-          style: 'currency', 
-          currency: 'COP',
-          minimumFractionDigits: 0 
-        }).format(price);
+    // Mostrar/ocultar formulario de nuevo pedido
+    window.toggleNuevoPedido = function() {
+      console.log('🔄 Ejecutando toggleNuevoPedido');
+      const form = document.getElementById('formNuevoPedido');
+      if (form) {
+        form.classList.toggle('hidden');
         
-        const detalles = `
-📦 DETALLES DEL PEDIDO
-
-🔢 Número: ${pedido.numero_pedido || `#${pedido.id.slice(0, 8)}`}
-👤 Cliente: ${pedido.cliente_nombre}
-📧 Email: ${pedido.cliente_email}
-📱 Teléfono: ${pedido.cliente_telefono || 'No proporcionado'}
-
-📍 DIRECCIÓN DE ENVÍO:
-${pedido.direccion_envio || 'No proporcionado'}
-🏙️ Ciudad: ${pedido.ciudad || 'No proporcionado'}
-📮 Código Postal: ${pedido.codigo_postal || 'No proporcionado'}
-
-🛍️ PRODUCTO:
-${pedido.productos?.title || 'Producto eliminado'}
-📦 SKU: ${pedido.productos?.sku || 'N/A'}
-💰 Precio unitario: ${formatPrice(pedido.precio_unitario)}
-🔢 Cantidad: ${pedido.cantidad}
-💵 Total: ${formatPrice(pedido.precio_total)}
-
-📊 ESTADO: ${pedido.estado.toUpperCase()}
-💳 Método de pago: ${pedido.metodo_pago}
-📅 Fecha: ${new Date(pedido.created_at).toLocaleDateString('es-ES')}
-        `;
-        
-        alert(detalles);
-      } else {
-        alert('❌ No se encontraron los detalles del pedido');
-      }
-    }
-    
-    function actualizarEstado(pedidoId, estadoActual) {
-      pedidoIdActual = pedidoId;
-      const modal = document.getElementById('modal-estado');
-      const select = document.getElementById('nuevo-estado');
-      
-      if (modal && select) {
-        select.value = estadoActual;
-        modal.classList.remove('hidden');
-        modal.querySelector('.flex')?.classList.add('flex');
-      }
-    }
-    
-    function cerrarModal() {
-      const modal = document.getElementById('modal-estado');
-      if (modal) {
-        modal.classList.add('hidden');
-        modal.querySelector('.flex')?.classList.remove('flex');
-      }
-    }
-    
-    async function confirmarActualizacion() {
-      const nuevoEstado = document.getElementById('nuevo-estado')?.value;
-      
-      if (!nuevoEstado || !pedidoIdActual) return;
-      
-      try {
-        const response = await fetch('/api/pedidos/update-status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            pedidoId: pedidoIdActual,
-            nuevoEstado: nuevoEstado
-          })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          alert(`✅ ${result.message}`);
-          cerrarModal();
-          
-          // Recargar la página para mostrar los cambios
-          window.location.reload();
-        } else {
-          throw new Error(result.error || 'Error al actualizar el pedido');
+        if (!form.classList.contains('hidden')) {
+          // Resetear formulario cuando se abre
+          const formElement = document.getElementById('nuevoPedidoForm');
+          if (formElement) {
+            formElement.reset();
+          }
         }
-        
-      } catch (error) {
-        console.error('Error:', error);
-        alert(`❌ Error: ${error.message}`);
+      } else {
+        console.error('❌ No se encontró formNuevoPedido');
       }
-    }
+    };
 
-    // Nueva función para eliminar pedidos
-    async function eliminarPedido(id, numeroPedido, event) {
-      const confirmMessage = `¿Estás seguro de que quieres eliminar el pedido #${numeroPedido}?\n\n⚠️ IMPORTANTE:\n• Esta acción no se puede deshacer\n• Se eliminará permanentemente de la base de datos\n• Los pedidos entregados no se pueden eliminar (se conservan para el historial)`;
+    // Calcular total automáticamente
+    window.calcularTotal = function() {
+      console.log('🧮 Calculando total');
+      const productoSelect = document.querySelector('select[name="producto_id"]');
+      const cantidadInput = document.querySelector('input[name="cantidad"]');
+      const totalInput = document.querySelector('input[name="precio_total"]');
       
-      if (!confirm(confirmMessage)) {
-        return;
+      if (productoSelect && cantidadInput && totalInput) {
+        const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+        const precio = parseFloat(selectedOption.dataset.price || '0') || 0;
+        const cantidad = parseInt(cantidadInput.value) || 0;
+        
+        totalInput.value = (precio * cantidad).toString();
+        console.log('💰 Total calculado:', precio * cantidad);
       }
+    };
 
-      // Mostrar indicador de carga
-      const button = event.target;
-      const originalText = button.innerHTML;
-      button.innerHTML = '⏳ Eliminando...';
-      button.disabled = true;
-      button.style.opacity = '0.6';
+    // Función para actualizar estado
+    window.actualizarEstado = function(id, estadoActual) {
+      console.log('🔄 Actualizando estado para:', id);
+      const nuevosEstados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado'];
+      const estadoSeleccionado = prompt(`Estado actual: ${estadoActual}\n\nSelecciona nuevo estado:\n1. pendiente\n2. confirmado\n3. preparando\n4. enviado\n5. entregado\n6. cancelado\n\nEscribe el número:`);
+      
+      if (estadoSeleccionado && estadoSeleccionado >= '1' && estadoSeleccionado <= '6') {
+        const nuevoEstado = nuevosEstados[parseInt(estadoSeleccionado) - 1];
+        
+        console.log('🚀 Enviando actualización:', { id, status: nuevoEstado });
+        
+        fetch('/api/pedidos/update-status-simple', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status: nuevoEstado })
+        })
+        .then(response => response.json())
+        .then(result => {
+          console.log('📄 Resultado actualización:', result);
+          if (result.success) {
+            alert(`✅ Estado actualizado a: ${nuevoEstado}`);
+            location.reload();
+          } else {
+            alert(`❌ Error: ${result.error}`);
+          }
+        })
+        .catch(error => {
+          console.error('❌ Error:', error);
+          alert('❌ Error de conexión');
+        });
+      }
+    };
+
+    // Función para eliminar pedido
+    window.eliminarPedido = async function(id) {
+      console.log('🗑️ Eliminando pedido:', id);
+      if (!confirm('¿Estás seguro de eliminar este pedido?')) return;
 
       try {
-        console.log('🗑️ Enviando solicitud de eliminación para pedido:', id);
-        
         const response = await fetch('/api/pedidos/delete', {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id })
         });
 
-        console.log('📡 Respuesta del servidor:', response.status);
-        const data = await response.json();
+        const result = await response.json();
+        console.log('📄 Resultado eliminación:', result);
 
         if (response.ok) {
-          console.log('✅ Pedido eliminado:', data);
-          alert(`✅ ${data.message}`);
+          alert('✅ Pedido eliminado');
           location.reload();
-          
-        } else if (response.status === 409) {
-          // Pedido no se puede eliminar
-          console.warn('⚠️ Pedido protegido:', data);
-          alert(`⚠️ ${data.error}\n\n💡 ${data.warning || ''}`);
-          
         } else {
-          // Otros errores
-          console.error('❌ Error del servidor:', data);
-          alert(`❌ Error: ${data.error || 'No se pudo eliminar el pedido'}\n\nDetalles: ${data.details || 'Error desconocido'}`);
+          alert(`❌ Error: ${result.error}`);
         }
       } catch (error) {
-        console.error('❌ Error de red:', error);
-        alert('❌ Error de conexión\n\nNo se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.');
-      } finally {
-        // Restaurar botón
-        button.innerHTML = originalText;
-        button.disabled = false;
-        button.style.opacity = '1';
+        console.error('❌ Error:', error);
+        alert('❌ Error de conexión');
       }
-    }
+    };
+
+    // 🚀 Event listeners cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('🚀 DOM cargado, inicializando eventos...');
+      
+      // Event listener para cambio de producto
+      const productoSelect = document.querySelector('select[name="producto_id"]');
+      if (productoSelect) {
+        productoSelect.addEventListener('change', window.calcularTotal);
+        console.log('✅ Event listener agregado al select de productos');
+      } else {
+        console.error('❌ No se encontró el select de productos');
+      }
+
+      // Manejar envío del formulario
+      const form = document.getElementById('nuevoPedidoForm');
+      if (form) {
+        console.log('✅ Formulario encontrado, agregando event listener');
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          console.log('📝 Formulario enviado');
+          
+          const formData = new FormData(e.target);
+          const data = Object.fromEntries(formData.entries());
+          
+          console.log('📋 Datos del formulario:', data);
+          
+          // Validar datos
+          if (!data.producto_id || !data.cliente_nombre || !data.cliente_telefono) {
+            alert('Por favor completa todos los campos obligatorios');
+            return;
+          }
+
+          const payload = {
+            ...data,
+            metodo_pago: 'whatsapp',
+            status: 'pendiente'
+          };
+          
+          console.log('🚀 Enviando payload:', payload);
+
+          try {
+            const response = await fetch('/api/pedidos/create-manual', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            console.log('📡 Respuesta recibida:', response.status);
+            const result = await response.json();
+            console.log('📄 Resultado:', result);
+
+            if (response.ok) {
+              alert(`✅ Pedido creado exitosamente!\nNúmero de seguimiento: ${result.numero_seguimiento}`);
+              location.reload();
+            } else {
+              alert(`❌ Error: ${result.error}`);
+              console.error('❌ Error del servidor:', result);
+            }
+          } catch (error) {
+            console.error('❌ Error de conexión:', error);
+            alert('❌ Error de conexión');
+          }
+        });
+      } else {
+        console.error('❌ No se encontró el formulario nuevoPedidoForm');
+      }
+    });
   </script>
 </DashboardLayout>

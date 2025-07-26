@@ -1,0 +1,319 @@
+        ---
+// 📦 Página de seguimiento de pedidos para usuarios
+import { supabase } from '../lib/supabaseClient';
+
+let pedido: any = null;
+let historial: any[] = [];
+let error: string | null = null;
+let numeroSeguimiento = '';
+
+// Obtener el número de seguimiento de la URL
+const url = Astro.url;
+numeroSeguimiento = url.searchParams.get('numero') || '';
+
+if (numeroSeguimiento) {
+  try {
+    // Buscar pedido por número de seguimiento
+    const { data: pedidoData, error: pedidoError } = await supabase
+      .from('pedidos')
+      .select(`
+        *,
+        productos:producto_id (
+          id,
+          title,
+          images,
+          price
+        )
+      `)
+      .eq('numero_seguimiento', numeroSeguimiento)
+      .single();
+
+    if (pedidoError) {
+      throw pedidoError;
+    }
+
+    pedido = pedidoData;
+
+    // Obtener historial del pedido
+    const { data: historialData, error: historialError } = await supabase
+      .from('pedidos_historial')
+      .select('*')
+      .eq('pedido_id', pedido.id)
+      .order('created_at', { ascending: true });
+
+    if (!historialError) {
+      historial = historialData || [];
+    }
+
+  } catch (e: any) {
+    console.error('Error cargando pedido:', e);
+    if (e.code === 'PGRST116') {
+      error = 'Número de seguimiento no encontrado';
+    } else {
+      error = 'Error cargando información del pedido';
+    }
+  }
+}
+
+// Función para obtener el estado visual
+function getEstadoInfo(estado: string) {
+  const estadosInfo = {
+    'pendiente': { emoji: '⏳', color: 'yellow', texto: 'Pendiente' },
+    'pagado': { emoji: '💳', color: 'blue', texto: 'Pagado' },
+    'confirmado': { emoji: '✅', color: 'blue', texto: 'Confirmado' },
+    'preparando': { emoji: '📦', color: 'orange', texto: 'Preparando' },
+    'enviado': { emoji: '🚛', color: 'indigo', texto: 'Enviado' },
+    'en_transito': { emoji: '🛣️', color: 'indigo', texto: 'En Tránsito' },
+    'entregado': { emoji: '✅', color: 'green', texto: 'Entregado' },
+    'cancelado': { emoji: '❌', color: 'red', texto: 'Cancelado' },
+    'devuelto': { emoji: '🔄', color: 'gray', texto: 'Devuelto' }
+  };
+  return estadosInfo[estado as keyof typeof estadosInfo] || 
+         { emoji: '❓', color: 'gray', texto: estado };
+}
+
+// Función para formatear precio
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguimiento de Pedido - Tu Tienda</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="container mx-auto px-4 py-8 max-w-4xl">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">📦 Seguimiento de Pedido</h1>
+      <p class="text-gray-600">Consulta el estado actual de tu pedido</p>
+    </div>
+
+    <!-- Formulario de búsqueda -->
+    {!numeroSeguimiento && (
+      <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold mb-4">🔍 Buscar tu Pedido</h2>
+        <form method="GET" class="flex gap-4">
+          <input
+            type="text"
+            name="numero"
+            placeholder="Ingresa tu número de seguimiento (ej: TS2501123456)"
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            required
+          >
+          <button
+            type="submit"
+            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Buscar
+          </button>
+        </form>
+        
+        <div class="mt-4 text-sm text-gray-500">
+          <p>💡 <strong>¿No tienes tu número de seguimiento?</strong></p>
+          <p>• Revisa el email de confirmación de tu pedido</p>
+          <p>• También lo encuentras en el mensaje de WhatsApp que enviaste</p>
+          <p>• Contacta con nosotros si necesitas ayuda</p>
+        </div>
+      </div>
+    )}
+
+    <!-- Error -->
+    {error && (
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
+        <div class="flex items-center">
+          <span class="text-2xl mr-3">❌</span>
+          <div>
+            <h3 class="text-red-800 font-semibold">Error</h3>
+            <p class="text-red-700">{error}</p>
+          </div>
+        </div>
+        <div class="mt-4">
+          <a 
+            href="/seguimiento" 
+            class="text-red-600 hover:text-red-800 underline"
+          >
+            ← Buscar otro pedido
+          </a>
+        </div>
+      </div>
+    )}
+
+    <!-- Información del pedido -->
+    {pedido && !error && (
+      <div class="space-y-8">
+        <!-- Resumen del pedido -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <div class="flex justify-between items-start mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold text-gray-900">
+                Pedido #{pedido.numero_pedido || pedido.id.slice(0, 8)}
+              </h2>
+              <p class="text-gray-600 mt-1">Número de seguimiento: <span class="font-mono text-blue-600">{pedido.numero_seguimiento}</span></p>
+            </div>
+            
+            <div class="text-right">
+              {(() => {
+                const estadoInfo = getEstadoInfo(pedido.status);
+                return (
+                  <span class={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-${estadoInfo.color}-100 text-${estadoInfo.color}-800`}>
+                    <span class="mr-1">{estadoInfo.emoji}</span>
+                    {estadoInfo.texto}
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+
+          <!-- Producto -->
+          <div class="border-t pt-6">
+            <h3 class="font-semibold text-gray-900 mb-4">🛍️ Producto</h3>
+            <div class="flex items-start space-x-4">
+              {pedido.productos?.images?.[0] && (
+                <img 
+                  src={pedido.productos.images[0]} 
+                  alt={pedido.productos.title}
+                  class="w-20 h-20 object-cover rounded-lg"
+                >
+              )}
+              <div class="flex-1">
+                <h4 class="font-medium text-gray-900">{pedido.productos?.title || 'Producto'}</h4>
+                <p class="text-gray-600 text-sm mt-1">Cantidad: {pedido.cantidad}</p>
+                <p class="text-gray-900 font-semibold mt-2">{formatPrice(pedido.precio_total)}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Información de entrega -->
+          {(pedido.transportadora || pedido.numero_guia || pedido.fecha_estimada_entrega) && (
+            <div class="border-t pt-6 mt-6">
+              <h3 class="font-semibold text-gray-900 mb-4">🚛 Información de Entrega</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                {pedido.transportadora && (
+                  <div>
+                    <span class="text-gray-600">Transportadora:</span>
+                    <p class="font-medium">{pedido.transportadora}</p>
+                  </div>
+                )}
+                {pedido.numero_guia && (
+                  <div>
+                    <span class="text-gray-600">Número de Guía:</span>
+                    <p class="font-medium font-mono">{pedido.numero_guia}</p>
+                  </div>
+                )}
+                {pedido.fecha_estimada_entrega && (
+                  <div>
+                    <span class="text-gray-600">Fecha Estimada:</span>
+                    <p class="font-medium">{new Date(pedido.fecha_estimada_entrega).toLocaleDateString('es-ES')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <!-- Seguimiento del estado -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-semibold text-gray-900 mb-6">📈 Seguimiento del Estado</h3>
+          
+          {historial.length > 0 ? (
+            <div class="space-y-4">
+              {historial.map((evento, index) => {
+                const estadoInfo = getEstadoInfo(evento.estado_nuevo);
+                const isLatest = index === historial.length - 1;
+                
+                return (
+                  <div class={`flex items-start space-x-4 ${isLatest ? 'bg-blue-50 p-4 rounded-lg' : ''}`}>
+                    <div class={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm
+                      ${isLatest ? 'bg-blue-600 text-white' : `bg-${estadoInfo.color}-100 text-${estadoInfo.color}-800`}`}>
+                      {estadoInfo.emoji}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between">
+                        <p class={`font-medium ${isLatest ? 'text-blue-900' : 'text-gray-900'}`}>
+                          {estadoInfo.texto}
+                        </p>
+                        <p class="text-sm text-gray-500">
+                          {new Date(evento.created_at).toLocaleString('es-ES')}
+                        </p>
+                      </div>
+                      {evento.observaciones && (
+                        <p class="text-sm text-gray-600 mt-1">{evento.observaciones}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div class="text-center py-8 text-gray-500">
+              <p>No hay historial de seguimiento disponible</p>
+            </div>
+          )}
+        </div>
+
+        <!-- Acciones -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h3 class="text-xl font-semibold text-gray-900 mb-4">📞 ¿Necesitas Ayuda?</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a 
+              href="https://wa.me/3053947290?text=Hola,%20tengo%20una%20consulta%20sobre%20mi%20pedido%20" + pedido.numero_seguimiento
+              target="_blank"
+              class="flex items-center justify-center space-x-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-3 rounded-lg transition-colors"
+            >
+              <span>💬</span>
+              <span>Contactar por WhatsApp</span>
+            </a>
+            <a 
+              href="mailto:soporte@tutienda.com?subject=Consulta%20pedido%20" + pedido.numero_seguimiento
+              class="flex items-center justify-center space-x-2 bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-3 rounded-lg transition-colors"
+            >
+              <span>📧</span>
+              <span>Enviar Email</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Calificar pedido -->
+        {pedido.status === 'entregado' && (
+          <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-xl font-semibold text-gray-900 mb-4">⭐ Califica tu Experiencia</h3>
+            <p class="text-gray-600 mb-4">¡Tu pedido ha sido entregado! Ayúdanos a mejorar calificando tu experiencia.</p>
+            <button 
+              onclick="mostrarFormularioCalificacion()"
+              class="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-lg transition-colors"
+            >
+              Calificar Pedido
+            </button>
+          </div>
+        )}
+
+        <!-- Buscar otro pedido -->
+        <div class="text-center">
+          <a 
+            href="/seguimiento" 
+            class="text-blue-600 hover:text-blue-800 underline"
+          >
+            ← Buscar otro pedido
+          </a>
+        </div>
+      </div>
+    )}
+  </div>
+
+  <script>
+    function mostrarFormularioCalificacion() {
+      alert('Funcionalidad de calificación próximamente disponible');
+    }
+  </script>
+</body>
+</html>

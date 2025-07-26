@@ -35,14 +35,13 @@ function formatPrice(price: number) {
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-50 text-gray-900">
-    <!-- Header mejorado -->
+    <!-- Header -->
     <header class="bg-white shadow-sm border-b">
       <div class="container mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
           <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
           <nav class="flex items-center space-x-6">
             <a href="/" class="text-gray-700 hover:text-purple-600 transition-colors">Inicio</a>
-            <a href="/admin/productos" class="text-gray-700 hover:text-purple-600 transition-colors">Admin</a>
             <div class="relative">
               <button class="text-gray-700 hover:text-purple-600">
                 🛒 <span id="cart-badge" class="bg-red-500 text-white text-xs rounded-full px-2 py-1 ml-1 hidden">0</span>
@@ -53,620 +52,216 @@ function formatPrice(price: number) {
       </div>
     </header>
 
-    <main class="container mx-auto px-6 py-12">
-      <div class="mb-8">
-        <h1 class="text-4xl font-bold mb-2">🛒 Tu carrito</h1>
-        <p class="text-gray-600">Revisa tus productos y procede con tu pedido</p>
-      </div>
-
-      <!-- Contenedor del carrito -->
-      <div class="max-w-4xl mx-auto">
-        <div id="cart-container" class="space-y-4"></div>
-
-        <!-- Carrito vacío -->
-        <div id="empty-cart" class="text-center py-12 hidden">
-          <div class="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
-            <!-- Carrito vacío -->
-            <div class="mb-8">
-              <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
-                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-                </svg>
-              </div>
-              <h2 class="text-2xl font-semibold text-gray-800 mb-4">Tu carrito está vacío</h2>
-              <p class="text-gray-600 mb-8">¡Descubre nuestros productos y agrega algunos a tu carrito!</p>
-              <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg transition-colors inline-block mb-8">
-                Explorar productos
-              </a>
-            </div>
-
-            <!-- Productos recomendados -->
-            {productosRecomendados.length > 0 && (
-              <div>
-                <h3 class="text-lg font-semibold text-gray-800 mb-6">Productos que podrían interesarte</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {productosRecomendados.map((producto) => (
-                    <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                      {producto.images?.[0] && (
-                        <img 
-                          src={producto.images[0]} 
-                          alt={producto.title} 
-                          class="w-full h-32 object-cover rounded-lg mb-3"
-                        />
-                      )}
-                      <h4 class="font-semibold text-gray-900 mb-2">{producto.title}</h4>
-                      <p class="text-purple-600 font-bold mb-3">{formatPrice(producto.price)}</p>
-                      <a 
-                        href={`/producto/${producto.id}`}
-                        class="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors text-sm inline-block text-center"
-                      >
-                        Ver producto
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <!-- Resumen y acciones -->
-        <div id="cart-summary" class="mt-8 hidden">
-          <div class="bg-white p-6 rounded-lg shadow-lg">
-            <div class="flex justify-between items-center mb-6">
-              <h2 class="text-2xl font-semibold">Resumen del pedido</h2>
-              <button 
-                id="clear-cart"
-                class="text-red-500 hover:text-red-700 text-sm underline"
-              >
-                Vaciar carrito
-              </button>
-            </div>
-
-            <div class="border-t pt-4">
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-gray-600">Subtotal:</span>
-                <span id="cart-subtotal" class="font-semibold">$0</span>
-              </div>
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-gray-600">Envío:</span>
-                <span class="text-sm text-gray-500">A consultar</span>
-              </div>
-              <div class="border-t pt-2 flex justify-between items-center">
-                <span class="text-xl font-bold">Total:</span>
-                <span id="cart-total" class="text-xl font-bold text-purple-600">$0</span>
-              </div>
-            </div>
-
-            <div class="mt-6 space-y-3">
-              <a 
-                id="whatsapp-link" 
-                href="#" 
-                target="_blank" 
-                class="block w-full bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg transition-colors text-center font-semibold"
-              >
-                📱 Continuar por WhatsApp
-              </a>
-              
-              <button 
-                id="checkout-btn" 
-                class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-6 rounded-lg transition-colors font-semibold"
-              >
-                💳 Continuar al checkout
-              </button>
-              
-              <a 
-                href="/" 
-                class="block w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-lg transition-colors text-center"
-              >
-                ← Seguir comprando
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <script define:vars={{ productosRecomendados }}>
-      // 🛒 Sistema de carrito mejorado
+    <!-- Contenido principal -->
+    <main class="container mx-auto px-6 py-8">
+      <h1 class="text-3xl font-bold text-gray-900 mb-8">Tu Carrito de Compras</h1>
       
-      // Obtener carrito del localStorage
-      function getCart() {
-        try {
-          const cart = localStorage.getItem('cart');
-          return cart ? JSON.parse(cart) : [];
-        } catch (error) {
-          console.error('Error obteniendo carrito:', error);
-          return [];
-        }
-      }
-
-      // Guardar carrito en localStorage
-      function saveCart(cart) {
-        try {
-          localStorage.setItem('cart', JSON.stringify(cart));
-          updateCartBadge();
-        } catch (error) {
-          console.error('Error guardando carrito:', error);
-        }
-      }
-
-      // Actualizar badge del carrito
-      function updateCartBadge() {
-        const cart = getCart();
-        const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-        const badge = document.getElementById('cart-badge');
-        if (badge) {
-          badge.textContent = totalItems;
-          badge.style.display = totalItems > 0 ? 'inline' : 'none';
-        }
-      }
-
-      // Formatear precio
-      function formatPrice(price) {
-        return new Intl.NumberFormat('es-CO', {
-          style: 'currency',
-          currency: 'COP',
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0
-        }).format(price);
-      }
-
-      // Eliminar producto del carrito - FIX
-      function removeFromCart(productId) {
-        console.log('🗑️ Eliminando producto ID:', productId);
-        const cart = getCart();
-        console.log('📦 Carrito antes:', cart.map(item => ({ id: item.id, title: item.title })));
+      <!-- Carrito vacío -->
+      <div id="empty-cart" class="text-center py-16 hidden">
+        <div class="text-6xl mb-4">🛒</div>
+        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Tu carrito está vacío</h2>
+        <p class="text-gray-500 mb-8">¡Agrega algunos productos increíbles!</p>
+        <a href="/" class="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors">
+          Continuar Comprando
+        </a>
         
-        // Convertir ambos IDs a string para comparación segura
-        const updatedCart = cart.filter(item => String(item.id) !== String(productId));
-        
-        console.log('📦 Carrito después:', updatedCart.map(item => ({ id: item.id, title: item.title })));
-        console.log(`✅ Productos eliminados: ${cart.length - updatedCart.length}`);
-        
-        saveCart(updatedCart);
-        renderCart();
-        showNotification('Producto eliminado del carrito', 'info');
-      }
-
-      // Actualizar cantidad de producto
-      function updateQuantity(productId, newQuantity) {
-        newQuantity = parseInt(newQuantity);
-        console.log(`🔄 Actualizando cantidad: ${productId} -> ${newQuantity}`);
-        
-        if (newQuantity < 1) {
-          removeFromCart(productId);
-          return;
-        }
-
-        const cart = getCart();
-        const item = cart.find(item => String(item.id) === String(productId));
-        if (item) {
-          item.quantity = newQuantity;
-          saveCart(cart);
-          renderCart();
-          console.log(`✅ Cantidad actualizada: ${item.title} -> ${newQuantity}`);
-        }
-      }
-
-      // Mostrar notificación
-      function showNotification(message, type) {
-        type = type || 'success';
-        const notification = document.createElement('div');
-        notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 transition-all duration-300 ${
-          type === 'success' ? 'bg-green-500' : 
-          type === 'error' ? 'bg-red-500' : 'bg-blue-500'
-        }`;
-        notification.textContent = message;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-          notification.style.transform = 'translateX(100%)';
-          setTimeout(() => {
-            if (document.body.contains(notification)) {
-              document.body.removeChild(notification);
-            }
-          }, 300);
-        }, 3000);
-      }
-
-      // Renderizar carrito
-      function renderCart() {
-        const cart = getCart();
-        const cartContainer = document.getElementById('cart-container');
-        const emptyCart = document.getElementById('empty-cart');
-        const summary = document.getElementById('cart-summary');
-
-        console.log('🎨 Renderizando carrito con', cart.length, 'productos');
-
-        if (cart.length === 0) {
-          if (cartContainer) cartContainer.innerHTML = '';
-          if (emptyCart) emptyCart.classList.remove('hidden');
-          if (summary) summary.classList.add('hidden');
-          return;
-        }
-
-        if (emptyCart) emptyCart.classList.add('hidden');
-        if (summary) summary.classList.remove('hidden');
-
-        // Renderizar items del carrito
-        if (cartContainer) {
-          cartContainer.innerHTML = cart.map(item => `
-            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow">
-              <div class="flex items-start space-x-4">
-                ${item.image || (item.images && item.images[0]) ? `
+        <!-- Productos recomendados -->
+        {productosRecomendados.length > 0 && (
+          <div class="mt-12">
+            <h3 class="text-xl font-semibold mb-6">Productos Recomendados</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {productosRecomendados.map((producto) => (
+                <div class="bg-white rounded-lg shadow-md overflow-hidden">
                   <img 
-                    src="${item.image || item.images[0]}" 
-                    alt="${item.title}" 
-                    class="w-24 h-24 object-cover rounded-lg flex-shrink-0"
-                    onerror="this.parentElement.innerHTML='<div class=\\'w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0\\'>📷</div>'"
-                  >
-                ` : `
-                  <div class="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                    📷
-                  </div>
-                `}
-                
-                <div class="flex-1">
-                  <h3 class="text-lg font-semibold text-gray-900 mb-2">${item.title}</h3>
-                  <p class="text-purple-600 font-bold text-lg mb-2">${formatPrice(item.price)}</p>
-                  ${item.sku ? `<p class="text-sm text-gray-500 mb-2">SKU: ${item.sku}</p>` : ''}
-                  
-                  <!-- Controles de cantidad -->
-                  <div class="flex items-center space-x-3">
-                    <span class="text-sm text-gray-600">Cantidad:</span>
-                    <button 
-                      onclick="updateQuantity('${item.id}', ${item.quantity - 1})"
-                      class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors"
-                      ${item.quantity <= 1 ? 'title="Eliminar producto"' : ''}
-                    >
-                      ${item.quantity <= 1 ? '🗑️' : '−'}
-                    </button>
-                    
-                    <input 
-                      type="number" 
-                      value="${item.quantity}" 
-                      min="1" 
-                      max="99"
-                      class="w-16 text-center border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      onchange="updateQuantity('${item.id}', this.value)"
-                    />
-                    
-                    <button 
-                      onclick="updateQuantity('${item.id}', ${item.quantity + 1})"
-                      class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center transition-colors"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Total del item -->
-                <div class="text-right">
-                  <p class="text-xl font-bold text-gray-900 mb-2">${formatPrice(item.price * item.quantity)}</p>
-                  <button 
-                    onclick="removeFromCart('${item.id}')"
-                    class="text-red-500 hover:text-red-700 text-sm font-medium underline"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </div>
-            </div>
-          `).join('');
-        }
-
-        // Actualizar totales
-        const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        
-        const totalElement = document.getElementById('cart-total');
-        const subtotalElement = document.getElementById('cart-subtotal');
-        
-        if (totalElement) totalElement.textContent = formatPrice(total);
-        if (subtotalElement) subtotalElement.textContent = formatPrice(total);
-
-        // Actualizar enlace de WhatsApp
-        updateWhatsAppLink(cart, total);
-      }
-
-      // Actualizar enlace de WhatsApp
-      function updateWhatsAppLink(cart, total) {
-        const whatsappLink = document.getElementById('whatsapp-link');
-        if (!whatsappLink) return;
-        
-        let message = "🛒 *Carrito de Compras - TuMarca*\\n\\n";
-        
-        cart.forEach((item, index) => {
-          message += `${index + 1}. *${item.title}*\\n`;
-          message += `   └ Cantidad: ${item.quantity}\\n`;
-          message += `   └ Precio: ${formatPrice(item.price)}\\n`;
-          message += `   └ Subtotal: ${formatPrice(item.price * item.quantity)}\\n\\n`;
-        });
-        
-        message += `💰 *Total: ${formatPrice(total)}*\\n\\n`;
-        message += "¡Hola! Me interesan estos productos. ¿Podrían confirmar disponibilidad y darme información sobre el proceso de compra y envío?";
-        
-        const encodedMessage = encodeURIComponent(message);
-        const phoneNumber = "573053947290"; // Tu número de WhatsApp
-        
-        whatsappLink.href = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-      }
-
-      // Vaciar carrito
-      function clearCart() {
-        if (confirm('¿Estás seguro de que quieres vaciar tu carrito?')) {
-          saveCart([]);
-          renderCart();
-          showNotification('Carrito vaciado', 'info');
-        }
-      }
-
-      // Checkout - redirigir a página de checkout
-      function proceedToCheckout() {
-        const cart = getCart();
-        if (cart.length === 0) {
-          showNotification('Tu carrito está vacío', 'error');
-          return;
-        }
-        
-        console.log('🛒 Redirigiendo a checkout con', cart.length, 'productos');
-        window.location.href = '/checkout';
-      }
-
-      // Inicializar cuando el DOM esté listo
-      document.addEventListener('DOMContentLoaded', function() {
-        console.log('🚀 Inicializando carrito...');
-        renderCart();
-        updateCartBadge();
-        
-        // Event listeners
-        const clearButton = document.getElementById('clear-cart');
-        if (clearButton) {
-          clearButton.addEventListener('click', clearCart);
-        }
-
-        const checkoutBtn = document.getElementById('checkout-btn');
-        if (checkoutBtn) {
-          checkoutBtn.addEventListener('click', proceedToCheckout);
-        }
-
-        // Debug info
-        const cart = getCart();
-        console.log(`🛒 Carrito cargado: ${cart.length} tipos de productos`);
-        if (cart.length > 0) {
-          console.log('Productos en carrito:', cart.map(item => ({ id: item.id, title: item.title, qty: item.quantity })));
-        }
-      });
-
-      // Hacer funciones globales para onclick
-      window.updateQuantity = updateQuantity;
-      window.removeFromCart = removeFromCart;
-      window.clearCart = clearCart;
-    </script>
-  </body>
-</html>
-      <h1 class="text-4xl font-bold mb-10 text-center">Tu carrito</h1>
-
-      <div id="cart-container" class="space-y-4 max-w-2xl mx-auto"></div>
-
-      <div id="empty-cart" class="text-center py-12 hidden">
-        <div class="bg-white p-8 rounded-lg shadow-lg max-w-2xl mx-auto">
-          <!-- Carrito vacío -->
-          <div class="mb-8">
-            <div class="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
-              <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-              </svg>
-            </div>
-            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Tu carrito está vacío</h2>
-            <p class="text-gray-600 mb-8">¡Descubre nuestros productos y agrega algunos a tu carrito!</p>
-            <a href="/" class="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg transition-colors inline-block mb-8">
-              Explorar productos
-            </a>
-          </div>
-
-          <!-- Productos recomendados -->
-          {productosRecomendados.length > 0 && (
-            <div>
-              <h3 class="text-lg font-semibold text-gray-800 mb-6">Productos que podrían interesarte</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {productosRecomendados.map((producto) => (
-                  <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    {producto.images?.[0] && (
-                      <img 
-                        src={producto.images[0]} 
-                        alt={producto.title} 
-                        class="w-full h-32 object-cover rounded-lg mb-3"
-                      />
-                    )}
-                    <h4 class="font-semibold text-gray-900 mb-2">{producto.title}</h4>
-                    <p class="text-purple-600 font-bold mb-3">{formatPrice(producto.price)}</p>
+                    src={producto.images?.[0] || "/placeholder.jpg"} 
+                    alt={producto.title}
+                    class="w-full h-48 object-cover"
+                  />
+                  <div class="p-4">
+                    <h4 class="font-semibold text-sm">{producto.title}</h4>
+                    <p class="text-purple-600 font-bold">{formatPrice(producto.price)}</p>
                     <a 
                       href={`/producto/${producto.id}`}
-                      class="w-full bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700 transition-colors text-sm inline-block text-center"
+                      class="block mt-2 bg-purple-600 text-white text-center py-2 rounded hover:bg-purple-700 transition-colors text-sm"
                     >
-                      Ver producto
+                      Ver Producto
                     </a>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      <div id="summary" class="mt-10 text-center hidden max-w-md mx-auto">
-        <div class="bg-white p-6 rounded-lg shadow">
-          <p class="text-2xl font-semibold mb-6">Total: $<span id="cart-total">0</span></p>
-          <div class="space-y-4">
-            <button 
-              id="clear-cart"
-              class="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition"
-            >
-              Vaciar carrito
-            </button>
-            <a 
-              id="whatsapp-link" 
-              href="#" 
-              target="_blank" 
-              class="block w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded transition text-center"
-            >
-              📱 Enviar pedido por WhatsApp
-            </a>
-            <a 
-              href="/pago" 
-              class="block w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded transition text-center"
-            >
-              💳 Pagar online
-            </a>
+      <!-- Carrito con items -->
+      <div id="cart-content" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <!-- Items del carrito -->
+          <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h2 class="text-xl font-semibold mb-4">Productos en tu carrito</h2>
+              <div id="cart-items" class="space-y-4">
+                <!-- Los items se cargarán dinámicamente -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Resumen y checkout -->
+          <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow-md p-6 sticky top-4">
+              <h2 class="text-xl font-semibold mb-4">Resumen del pedido</h2>
+              
+              <!-- Información del cliente -->
+              <form id="checkout-form" class="space-y-4 mb-6">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1" for="nombre">
+                    Nombre completo *
+                  </label>
+                  <input 
+                    type="text" 
+                    id="nombre" 
+                    required
+                    class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1" for="email">
+                    Email *
+                  </label>
+                  <input 
+                    type="email" 
+                    id="email" 
+                    required
+                    class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1" for="telefono">
+                    Teléfono
+                  </label>
+                  <input 
+                    type="tel" 
+                    id="telefono"
+                    class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1" for="direccion">
+                    Dirección de envío *
+                  </label>
+                  <textarea 
+                    id="direccion" 
+                    required
+                    rows="2"
+                    class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  ></textarea>
+                </div>
+              </form>
+
+              <!-- Resumen de precios -->
+              <div class="border-t pt-4 space-y-2">
+                <div class="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span id="subtotal">$0</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>Envío:</span>
+                  <span class="text-green-600">Gratis</span>
+                </div>
+                <div class="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Total:</span>
+                  <span id="total">$0</span>
+                </div>
+              </div>
+
+              <!-- Botones de pago -->
+              <div class="space-y-3 mt-4">
+                <!-- MercadoPago -->
+                <button 
+                  id="checkout-btn"
+                  onclick="handleCheckout()"
+                  class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+                >
+                  <img src="https://www.mercadopago.com/org-img/MP3/home/logomp3.gif" alt="MercadoPago" class="h-5 mr-2">
+                  Pagar con MercadoPago
+                </button>
+                
+                <!-- WhatsApp -->
+                <button 
+                  id="whatsapp-btn"
+                  onclick="handleWhatsAppOrder()"
+                  class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+                >
+                  <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                  </svg>
+                  Pedir por WhatsApp
+                </button>
+              </div>
+              
+              <div class="text-xs text-gray-500 text-center mt-3 space-y-1">
+                <p>💳 Pago inmediato y seguro con MercadoPago</p>
+                <p>📱 O coordina el pago por WhatsApp</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </main>
 
-    <script is:inline>
-      // Variables globales
-      let cartContainer, totalElement, summary, emptyCart, whatsappLink, clearCartBtn;
-
-      // Inicializar elementos DOM
-      function initElements() {
-        cartContainer = document.getElementById("cart-container");
-        totalElement = document.getElementById("cart-total");
-        summary = document.getElementById("summary");
-        emptyCart = document.getElementById("empty-cart");
-        whatsappLink = document.getElementById("whatsapp-link");
-        clearCartBtn = document.getElementById("clear-cart");
-      }
-
-      function renderCart() {
-        if (!cartContainer || !totalElement || !summary || !emptyCart) return;
+    <!-- Script del carrito -->
+    <script src="/cart.js" type="module"></script>
+    
+    <script type="module">
+      // Función para manejar el checkout
+      window.handleCheckout = async function() {
+        const nombre = document.getElementById('nombre').value;
+        const email = document.getElementById('email').value;
+        const telefono = document.getElementById('telefono').value;
+        const direccion = document.getElementById('direccion').value;
         
-        cartContainer.innerHTML = "";
-        const cartData = localStorage.getItem("cart");
-        let cart = [];
-        
-        if (cartData) {
-          try {
-            cart = JSON.parse(cartData);
-          } catch (e) {
-            cart = [];
-          }
-        }
-
-        if (cart.length === 0) {
-          summary.classList.add("hidden");
-          emptyCart.classList.remove("hidden");
+        // Validar campos requeridos
+        if (!nombre || !email || !direccion) {
+          alert('Por favor completa todos los campos obligatorios');
           return;
         }
-
-        emptyCart.classList.add("hidden");
-        let total = 0;
-        let mensaje = "*🛒 Pedido desde la tienda online:*\n\n";
-
-        for (let i = 0; i < cart.length; i++) {
-          const item = cart[i];
-          const subtotal = item.price * item.quantity;
-          total += subtotal;
-
-          mensaje += "• " + item.title + "\n  Cantidad: " + item.quantity + "\n  Precio: $" + subtotal.toFixed(2) + "\n\n";
-
-          const card = document.createElement("div");
-          card.className = "bg-white p-4 rounded-lg shadow flex items-center gap-4";
-
-          const imageUrl = (item.images && item.images.length > 0) ? item.images[0] : '/placeholder.jpg';
-          
-          card.innerHTML = 
-            '<img src="' + imageUrl + '" alt="' + item.title + '" class="w-20 h-20 object-cover rounded" onerror="this.src=\'/placeholder.jpg\'" />' +
-            '<div class="flex-1">' +
-              '<h3 class="text-lg font-semibold">' + item.title + '</h3>' +
-              '<p class="text-gray-600">$' + item.price + ' c/u</p>' +
-              '<div class="flex items-center mt-2">' +
-                '<button onclick="updateQuantity(' + i + ', -1)" class="bg-gray-200 px-2 py-1 rounded text-sm hover:bg-gray-300">-</button>' +
-                '<span class="mx-3 font-semibold">' + item.quantity + '</span>' +
-                '<button onclick="updateQuantity(' + i + ', 1)" class="bg-gray-200 px-2 py-1 rounded text-sm hover:bg-gray-300">+</button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="text-right">' +
-              '<p class="font-bold">$' + subtotal.toFixed(2) + '</p>' +
-              '<button onclick="removeItem(' + i + ')" class="text-red-500 hover:underline text-sm mt-1">Eliminar</button>' +
-            '</div>';
-
-          cartContainer.appendChild(card);
-        }
-
-        totalElement.textContent = total.toFixed(2);
-        summary.classList.remove("hidden");
-
-        // Configurar enlace de WhatsApp
-        const numeroWpp = "573053947290";
-        const mensajeFinal = encodeURIComponent(mensaje + "*💰 Total: $" + total.toFixed(2) + "*\n\n¿Confirmas el pedido?");
-        if (whatsappLink) {
-          whatsappLink.href = "https://wa.me/" + numeroWpp + "?text=" + mensajeFinal;
-        }
-      }
-
-      // Funciones globales para los onclick
-      function updateQuantity(index, change) {
-        const cartData = localStorage.getItem("cart");
-        let cart = [];
         
-        if (cartData) {
-          try {
-            cart = JSON.parse(cartData);
-          } catch (e) {
-            cart = [];
-          }
+        // Validar email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          alert('Por favor ingresa un email válido');
+          return;
         }
         
-        if (cart[index]) {
-          cart[index].quantity = Math.max(1, cart[index].quantity + change);
-          localStorage.setItem("cart", JSON.stringify(cart));
-          renderCart();
-        }
-      }
-
-      function removeItem(index) {
-        const cartData = localStorage.getItem("cart");
-        let cart = [];
+        const clientInfo = {
+          nombre: nombre,
+          email: email,
+          telefono: telefono,
+          direccion: direccion
+        };
         
-        if (cartData) {
-          try {
-            cart = JSON.parse(cartData);
-          } catch (e) {
-            cart = [];
-          }
+        // Usar el cartManager para proceder al checkout
+        if (window.cartManager) {
+          await window.cartManager.proceedToCheckout(clientInfo);
+        } else {
+          alert('Error: Sistema de carrito no disponible');
         }
-        
-        if (cart[index]) {
-          cart.splice(index, 1);
-          localStorage.setItem("cart", JSON.stringify(cart));
-          renderCart();
+      };
+      
+      // Inicializar la página del carrito cuando cargue
+      setTimeout(() => {
+        console.log('🛒 Inicializando página del carrito');
+        if (window.cartManager) {
+          console.log('✅ CartManager encontrado, renderizando carrito');
+          window.cartManager.renderCartPage();
+        } else {
+          console.error('❌ CartManager no disponible');
         }
-      }
-
-      function clearCart() {
-        if (confirm('¿Estás seguro de que quieres vaciar el carrito?')) {
-          localStorage.removeItem("cart");
-          renderCart();
-        }
-      }
-
-      // Hacer funciones globales
-      window.updateQuantity = updateQuantity;
-      window.removeItem = removeItem;
-      window.clearCart = clearCart;
-
-      // Inicializar cuando el DOM esté listo
-      document.addEventListener('DOMContentLoaded', function() {
-        initElements();
-        renderCart();
-        
-        // Event listener para vaciar carrito
-        if (clearCartBtn) {
-          clearCartBtn.addEventListener('click', clearCart);
-        }
-      });
+      }, 500); // Esperar 500ms
     </script>
   </body>
 </html>

@@ -2,25 +2,18 @@
 const { title = "Panel Admin" } = Astro.props;
 const currentPath = Astro.url.pathname;
 
-import { getSessionFromToken } from '../lib/auth';
+// Obtener información del usuario del middleware
+const userSession = (Astro.locals as any)?.user || null;
 
-// Obtener información del usuario del token JWT
-let userSession: any = null;
-try {
-  const cookieHeader = Astro.request.headers.get('cookie') || '';
-  const tokenMatch = cookieHeader.match(/admin-token=([^;]+)/);
-  
-  if (tokenMatch) {
-    const token = tokenMatch[1];
-    console.log('🔍 Token encontrado en layout, obteniendo sesión...');
-    userSession = await getSessionFromToken(token);
-    console.log('👤 Sesión en layout:', userSession);
-  } else {
-    console.warn('⚠️ No se encontró token admin-token en layout');
-  }
-} catch (e) {
-  console.error('❌ Error parseando sesión de usuario:', e);
+if (!userSession) {
+  console.warn('⚠️ No se encontró información de usuario en middleware');
 }
+
+console.log('👤 Usuario en layout:', {
+  email: userSession?.email,
+  name: userSession?.name,
+  role: userSession?.role
+});
 
 // Función para determinar si un enlace está activo
 function isActiveLink(href: string) {
@@ -29,8 +22,8 @@ function isActiveLink(href: string) {
 
 // Configuración de permisos por rol
 const ROLE_PERMISSIONS = {
-  super_admin: ['dashboard', 'productos', 'pedidos', 'inventario', 'reportes'],
-  manager: ['dashboard', 'productos', 'pedidos', 'inventario', 'reportes'],
+  super_admin: ['dashboard', 'productos', 'pedidos', 'entregas', 'inventario', 'reportes'],
+  manager: ['dashboard', 'productos', 'pedidos', 'entregas', 'inventario', 'reportes'],
   editor: ['dashboard', 'productos', 'inventario'],
   viewer: ['dashboard']
 };
@@ -116,6 +109,20 @@ const permissionError = urlParams.get('error') === 'insufficient_permissions';
               >
                 <span class="text-lg">🧾</span>
                 <span class="font-medium">Pedidos</span>
+              </a>
+            )}
+            
+            {canAccess('entregas') && (
+              <a 
+                href="/admin/entregas" 
+                class={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                  isActiveLink('/admin/entregas') 
+                    ? 'bg-purple-100 text-purple-700 border-r-2 border-purple-600' 
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span class="text-lg">🚛</span>
+                <span class="font-medium">Entregas</span>
               </a>
             )}
             

@@ -15,6 +15,14 @@ const { data: product, error } = await supabase
 if (error || !product) {
   return Astro.redirect("/404");
 }
+
+// Función para formatear precios
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
 ---
 
 <html lang="es">
@@ -25,14 +33,17 @@ if (error || !product) {
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-100">
-    <!-- Header simple -->
+    <!-- Header -->
     <header class="bg-white shadow">
       <div class="container mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
           <a href="/" class="text-2xl font-bold text-purple-600">TuMarca</a>
-          <nav class="space-x-4">
+          <nav class="flex items-center space-x-4">
             <a href="/" class="text-gray-700 hover:text-purple-600">Inicio</a>
-            <a href="/carrito" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">🛒 Carrito</a>
+            <a href="/carrito" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center">
+              🛒 Carrito 
+              <span id="cart-badge" class="bg-red-500 text-white text-xs rounded-full px-2 py-1 ml-2 hidden">0</span>
+            </a>
           </nav>
         </div>
       </div>
@@ -40,7 +51,7 @@ if (error || !product) {
 
     <!-- Producto -->
     <main class="container mx-auto px-6 py-12">
-      <div class="bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl mx-auto">
+      <div class="bg-white rounded-lg shadow-lg overflow-hidden max-w-6xl mx-auto">
         <div class="md:flex">
           <!-- Imagen del producto -->
           <div class="md:flex-shrink-0 md:w-1/2">
@@ -48,98 +59,72 @@ if (error || !product) {
               src={product.images?.[0] || "/placeholder.jpg"} 
               alt={product.title}
               class="h-64 md:h-full w-full object-cover"
+              onerror="this.src='/placeholder.jpg'"
             />
           </div>
-          
+
           <!-- Información del producto -->
           <div class="p-8 md:w-1/2">
             <h1 class="text-3xl font-bold text-gray-900 mb-4">{product.title}</h1>
-            
-            <div class="mb-4">
-              <span class="text-3xl font-bold text-purple-600">${product.price}</span>
-            </div>
-            
             <p class="text-gray-600 mb-6">{product.description}</p>
             
             <div class="mb-6">
-              <span class="text-sm text-gray-500">Disponible: {product.stock} unidades</span>
+              <span class="text-4xl font-bold text-purple-600">{formatPrice(product.price)}</span>
+              {product.stock > 0 ? (
+                <p class="text-green-600 mt-2">✅ En stock ({product.stock} disponibles)</p>
+              ) : (
+                <p class="text-red-600 mt-2">❌ Sin stock</p>
+              )}
             </div>
 
-            {product.category && (
-              <div class="mb-6">
-                <span class="inline-block bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
-                  {product.category}
-                </span>
-              </div>
-            )}
-            
-            <!-- Controles de cantidad y botón agregar -->
-            <div class="flex items-center space-x-4 mb-6">
-              <div class="flex items-center border rounded">
-                <button 
-                  id="decrease-qty" 
-                  class="px-3 py-2 text-gray-600 hover:bg-gray-100"
-                  onclick="changeQuantity(-1)"
-                >-</button>
-                <input 
-                  type="number" 
-                  id="quantity" 
-                  value="1" 
-                  min="1" 
-                  max={product.stock}
-                  class="w-16 text-center py-2 border-l border-r"
-                />
-                <button 
-                  id="increase-qty" 
-                  class="px-3 py-2 text-gray-600 hover:bg-gray-100"
-                  onclick="changeQuantity(1)"
-                >+</button>
-              </div>
-            </div>
-            
-            <button 
-              id="add-to-cart"
-              class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 mb-4"
-              onclick="addToCart()"
-            >
-              🛒 Agregar al Carrito
-            </button>
+            {product.stock > 0 && (
+              <div class="space-y-4">
+                <!-- Selector de cantidad -->
+                <div class="flex items-center space-x-4">
+                  <label class="text-sm font-medium text-gray-700">Cantidad:</label>
+                  <div class="flex items-center border rounded">
+                    <button onclick="changeQuantity(-1)" class="px-3 py-2 hover:bg-gray-100">-</button>
+                    <input type="number" id="quantity" value="1" min="1" max={product.stock} 
+                           class="w-16 text-center border-0 focus:ring-0" />
+                    <button onclick="changeQuantity(1)" class="px-3 py-2 hover:bg-gray-100">+</button>
+                  </div>
+                </div>
 
-            <!-- Botones de Pago Online -->
-            {product.payment_config?.enabled && (
-              <div class="border-t pt-4 mt-4">
-                <h3 class="text-lg font-semibold mb-3 text-gray-800">💳 Comprar Ahora</h3>
+                <!-- Botón agregar al carrito -->
+                <button 
+                  id="add-to-cart"
+                  onclick="addToCart()"
+                  class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 mb-4"
+                >
+                  🛒 Agregar al Carrito
+                </button>
+
+                <!-- Botones de compra -->
                 <div class="space-y-3">
+                  <!-- MercadoPago -->
+                  <button 
+                    onclick="buyWithMercadoPago()"
+                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
+                  >
+                    <img src="https://www.mercadopago.com/org-img/MP3/home/logomp3.gif" alt="MercadoPago" class="h-6 mr-2">
+                    Comprar Ahora con MercadoPago
+                  </button>
                   
-                  {/* MercadoPago */}
-                  {product.payment_config.mercadopago?.enabled && (
-                    <button 
-                      onclick="buyWithMercadoPago()"
-                      class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
-                    >
-                      <span class="mr-2">🔵</span> Comprar con MercadoPago
-                    </button>
-                  )}
+                  <!-- WhatsApp -->
+                  <button 
+                    onclick="buyWithWhatsApp()"
+                    class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
+                  >
+                    <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
+                    </svg>
+                    Comprar por WhatsApp
+                  </button>
+                </div>
 
-                  {/* Stripe */}
-                  {product.payment_config.stripe?.enabled && (
-                    <button 
-                      onclick="buyWithStripe()"
-                      class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
-                    >
-                      <span class="mr-2">💳</span> Comprar con Stripe
-                    </button>
-                  )}
-
-                  {/* PayPal */}
-                  {product.payment_config.paypal?.enabled && (
-                    <button 
-                      onclick="buyWithPayPal()"
-                      class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center"
-                    >
-                      <span class="mr-2">🟡</span> Comprar con PayPal
-                    </button>
-                  )}
+                <div class="text-xs text-gray-500 text-center mt-3 space-y-1">
+                  <p>💳 Pago inmediato y seguro con MercadoPago</p>
+                  <p>📱 O coordina el pago por WhatsApp</p>
                 </div>
               </div>
             )}
@@ -148,187 +133,187 @@ if (error || !product) {
       </div>
     </main>
 
-    <script type="text/javascript" define:vars={{ productData: product }}>
-      // Los datos del producto se pasan desde el servidor
-      let quantity = 1;
+    <!-- Script principal -->
+    <script src="/cart.js" type="module"></script>
+    
+    <script type="module" define:vars={{ 
+      productId: product.id, 
+      productTitle: product.title, 
+      productDesc: product.description || '', 
+      productPrice: product.price, 
+      productStock: product.stock, 
+      productImage: product.images?.[0] || '/placeholder.jpg' 
+    }}>
+      // Esperar un poco para que se cargue el script del carrito
+      setTimeout(() => {
+        // Datos del producto
+        const productData = {
+          id: productId,
+          name: productTitle,
+          title: productTitle,
+          description: productDesc,
+          price: productPrice,
+          stock: productStock,
+          image_url: productImage
+        };
 
-      function changeQuantity(change) {
-        const qtyInput = document.getElementById('quantity');
-        if (qtyInput) {
-          const newQty = Math.max(1, Math.min(productData.stock, quantity + change));
-          quantity = newQty;
-          qtyInput.value = quantity;
-        }
-      }
+        let quantity = 1;
 
-      function addToCart() {
-        // Obtener carrito actual
-        let cart = JSON.parse(localStorage.getItem("cart") || "[]");
-        
-        // Verificar si el producto ya está en el carrito
-        const existingItemIndex = cart.findIndex(function(item) { 
-          return item.id === productData.id; 
-        });
-        
-        if (existingItemIndex > -1) {
-          // Si ya existe, aumentar la cantidad
-          cart[existingItemIndex].quantity += quantity;
-        } else {
-          // Si no existe, agregar nuevo item
-          cart.push({
-            id: productData.id,
-            title: productData.title,
-            price: productData.price,
-            description: productData.description,
-            images: productData.images,
-            stock: productData.stock,
-            quantity: quantity
-          });
-        }
-        
-        // Guardar carrito actualizado
-        localStorage.setItem("cart", JSON.stringify(cart));
-        
-        // Feedback al usuario
-        const button = document.getElementById('add-to-cart');
-        if (button) {
-          const originalText = button.textContent;
-          button.textContent = '¡Agregado!';
-          button.classList.add('bg-green-600');
-          button.classList.remove('bg-purple-600');
+        // Cambiar cantidad
+        window.changeQuantity = function(change) {
+          const newQuantity = quantity + change;
+          if (newQuantity >= 1 && newQuantity <= productData.stock) {
+            quantity = newQuantity;
+            const qtyInput = document.getElementById('quantity');
+            if (qtyInput) qtyInput.value = quantity;
+          }
+        };
+
+        // Agregar al carrito
+        window.addToCart = function() {
+          console.log('🛒 Intentando agregar al carrito:', productData);
+          const productToAdd = { ...productData, quantity: quantity };
           
-          setTimeout(function() {
+          if (window.cartManager) {
+            console.log('✅ CartManager encontrado, agregando producto');
+            window.cartManager.addProduct(productToAdd);
+          } else {
+            console.error('❌ CartManager no disponible');
+            alert('Error: Sistema de carrito no disponible');
+          }
+        };
+
+        // Comprar con MercadoPago
+        window.buyWithMercadoPago = async function() {
+          try {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = 'Procesando...';
+            button.disabled = true;
+
+            const nombre = prompt('Nombre completo:');
+            const email = prompt('Email:');
+            const direccion = prompt('Dirección de envío:');
+            
+            if (!nombre || !email || !direccion) {
+              alert('Todos los campos son requeridos');
+              return;
+            }
+
+            const response = await fetch('/api/mercadopago/create-preference', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                productId: productData.id,
+                title: productData.title,
+                description: productData.description,
+                price: productData.price,
+                quantity: quantity,
+                clienteInfo: { nombre, email, direccion }
+              })
+            });
+
+            const data = await response.json();
+            
+            if (data.success && data.init_point) {
+              window.location.href = data.init_point;
+            } else {
+              alert('Error: ' + (data.details || data.error || 'Error desconocido'));
+            }
+          } catch (error) {
+            alert('Error de conexión');
+          } finally {
             button.textContent = originalText;
-            button.classList.remove('bg-green-600');
-            button.classList.add('bg-purple-600');
-          }, 2000);
-        }
-      }
-
-      // 💳 Funciones de Pago Online
-      async function buyWithMercadoPago() {
-        try {
-          const button = event.target;
-          const originalText = button.textContent;
-          button.textContent = 'Procesando...';
-          button.disabled = true;
-
-          const response = await fetch('/api/mercadopago/create-preference', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              productId: productData.id,
-              title: productData.title,
-              price: productData.price,
-              quantity: quantity
-            })
-          });
-
-          const data = await response.json();
-          
-          if (data.init_point) {
-            // Pago real - redirigir a MercadoPago
-            window.location.href = data.init_point;
-          } else if (data.message && data.message.includes('demostración')) {
-            // Modo de demostración
-            alert(`🔵 MercadoPago - Modo Demo\n\n${data.info}\n\nRequerimientos:\n${data.requirements.join('\n')}`);
-          } else {
-            throw new Error(data.error || 'Error al crear preferencia de pago');
+            button.disabled = false;
           }
-        } catch (error) {
-          console.error('Error con MercadoPago:', error);
-          alert('Error al procesar pago con MercadoPago: ' + error.message);
-        } finally {
-          // Restaurar botón
-          const button = event.target;
-          button.textContent = originalText;
-          button.disabled = false;
-        }
-      }
+        };
 
-      async function buyWithStripe() {
-        try {
-          const button = event.target;
-          const originalText = button.textContent;
-          button.textContent = 'Procesando...';
-          button.disabled = true;
+        // 📱 Comprar con WhatsApp
+        window.buyWithWhatsApp = function() {
+          try {
+            console.log('📱 Iniciando compra por WhatsApp...');
+            
+            // Pedir información del cliente
+            const nombre = prompt('👤 Nombre completo:');
+            if (!nombre) {
+              alert('❌ El nombre es requerido');
+              return;
+            }
+            
+            const email = prompt('📧 Email:');
+            if (!email || !email.includes('@')) {
+              alert('❌ El email es requerido y debe ser válido');
+              return;
+            }
+            
+            const telefono = prompt('📱 Teléfono (con código de país):');
+            if (!telefono) {
+              alert('❌ El teléfono es requerido');
+              return;
+            }
+            
+            const direccion = prompt('📍 Dirección de entrega:');
+            if (!direccion) {
+              alert('❌ La dirección es requerida');
+              return;
+            }
 
-          const response = await fetch('/api/stripe/create-checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              productId: productData.id,
-              priceId: productData.payment_config.stripe.price_id,
+            // Crear información del cliente
+            const clientInfo = { nombre, email, telefono, direccion };
+            
+            // Crear producto para WhatsApp
+            const productForWhatsApp = [{
+              ...productData,
               quantity: quantity
-            })
-          });
+            }];
 
-          const data = await response.json();
-          
-          if (data.url && !data.message?.includes('demostración')) {
-            // Pago real - redirigir a Stripe
-            window.location.href = data.url;
-          } else if (data.message && data.message.includes('demostración')) {
-            // Modo de demostración
-            alert(`💳 Stripe - Modo Demo\n\n${data.info}\n\nRequerimientos:\n${data.requirements.join('\n')}`);
-          } else {
-            throw new Error(data.error || 'Error al crear sesión de pago');
+            // Usar el WhatsAppManager del carrito
+            if (window.WhatsAppManager) {
+              const success = window.WhatsAppManager.sendOrder(productForWhatsApp, clientInfo);
+              
+              if (success) {
+                alert('✅ ¡Perfecto!\n\nSe abrió WhatsApp con tu pedido.\nPuedes revisar y modificar el mensaje antes de enviarlo.\n\n¡Gracias por tu pedido! 🛍️');
+              }
+            } else {
+              // Fallback: generar mensaje manualmente
+              const total = productData.price * quantity;
+              const message = `¡Hola! Me interesa comprar:\n\n` +
+                            `📦 *PRODUCTO:*\n` +
+                            `• ${productData.title}\n` +
+                            `• Cantidad: ${quantity}\n` +
+                            `• Precio: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(productData.price)}\n` +
+                            `• Total: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(total)}\n\n` +
+                            `👤 *MIS DATOS:*\n` +
+                            `• Nombre: ${nombre}\n` +
+                            `• Email: ${email}\n` +
+                            `• Teléfono: ${telefono}\n` +
+                            `• Dirección: ${direccion}\n\n` +
+                            `Por favor confirma disponibilidad y coordina el pago. ¡Gracias! 🛍️`;
+              
+              const encodedMessage = encodeURIComponent(message);
+              const whatsappUrl = `https://wa.me/573001234567?text=${encodedMessage}`;
+              window.open(whatsappUrl, '_blank');
+              
+              alert('✅ ¡Perfecto!\n\nSe abrió WhatsApp con tu pedido.\n¡Gracias por tu compra! 🛍️');
+            }
+            
+          } catch (error) {
+            console.error('❌ Error en compra por WhatsApp:', error);
+            alert('❌ Hubo un error. Por favor intenta nuevamente.');
           }
-        } catch (error) {
-          console.error('Error con Stripe:', error);
-          alert('Error al procesar pago con Stripe: ' + error.message);
-        } finally {
-          // Restaurar botón
-          const button = event.target;
-          button.textContent = originalText;
-          button.disabled = false;
-        }
-      }
+        };
 
-      async function buyWithPayPal() {
-        try {
-          const button = event.target;
-          const originalText = button.textContent;
-          button.textContent = 'Procesando...';
-          button.disabled = true;
-
-          // Por ahora mostrar mensaje de que está en desarrollo
-          alert('PayPal estará disponible próximamente. Por favor usa MercadoPago o Stripe.');
-          
-          // Restaurar botón
-          button.textContent = originalText;
-          button.disabled = false;
-        } catch (error) {
-          console.error('Error con PayPal:', error);
-          alert('Error al procesar pago con PayPal');
-          
-          // Restaurar botón
-          const button = event.target;
-          button.textContent = originalText;
-          button.disabled = false;
-        }
-      }
-
-      // Exponer funciones globalmente para los onclick
-      window.changeQuantity = changeQuantity;
-      window.addToCart = addToCart;
-      window.buyWithMercadoPago = buyWithMercadoPago;
-      window.buyWithStripe = buyWithStripe;
-      window.buyWithPayPal = buyWithPayPal;
-
-      // Sincronizar input de cantidad
-      document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar
         const quantityInput = document.getElementById('quantity');
         if (quantityInput) {
           quantityInput.addEventListener('input', function(e) {
-            const target = e.target;
-            if (target && 'value' in target) {
-              quantity = Math.max(1, Math.min(productData.stock, parseInt(target.value) || 1));
-              target.value = quantity;
-            }
+            quantity = Math.max(1, Math.min(productData.stock, parseInt(e.target.value) || 1));
+            e.target.value = quantity;
           });
         }
-      });
+        
+        console.log('🎯 Página de producto inicializada correctamente');
+      }, 500); // Esperar 500ms para que se cargue el carrito
     </script>
   </body>
 </html>

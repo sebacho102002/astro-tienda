@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Debug</title>
+</head>
+<body>
+    <h1>🔧 Test de Debug para Botones</h1>
+    
+    <button onclick="testFunction()" style="padding: 10px; background: green; color: white;">
+        Test Button
+    </button>
+    
+    <div id="result"></div>
+    
+    <script>
+        console.log('🚀 Script cargado');
+        
+        function testFunction() {
+            console.log('✅ Función ejecutada correctamente');
+            document.getElementById('result').innerHTML = '✅ ¡La función funciona!';
+        }
+        
+        // Test al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ DOM cargado');
+            document.getElementById('result').innerHTML = '🔍 Página cargada - Haz clic en el botón';
+        });
+    </script>
+</body>
+</html>

@@ -3,15 +3,13 @@ export const prerender = false;
 
 import { supabase } from "../../lib/supabaseClient";
 
-console.log("🚨 SUPABASE_URL:", import.meta.env.PUBLIC_SUPABASE_URL);
-console.log("🚨 SUPABASE_KEY:", import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.substring(0, 10)); // solo primeros 10 caracteres
-
 let success = false;
-let error = null;
+let error = "";
 
 if (Astro.request.method === "POST") {
 	try {
-		console.log("🔍 Procesando formulario...");
+		console.log("📝 Procesando formulario de creación de producto...");
+
 		const formData = await Astro.request.formData();
 
 		const title = formData.get("title")?.toString() || "";
@@ -19,23 +17,17 @@ if (Astro.request.method === "POST") {
 		const price = parseFloat(formData.get("price")?.toString() || "0");
 		const stock = parseInt(formData.get("stock")?.toString() || "0");
 		const category = formData.get("category")?.toString() || "";
+		
+		// Campos opcionales (solo si existen en DB)
 		const sku = formData.get("sku")?.toString() || "";
-		const weight = parseFloat(formData.get("weight")?.toString() || "0");
+		const weight = parseFloat(formData.get("weight")?.toString() || "0") || null;
 		const dimensions = formData.get("dimensions")?.toString() || "";
 		
-		// Parsear imágenes desde textarea
-		const imagesText = formData.get("images")?.toString().trim() || "";
-		const imageUrls: string[] = [];
-		
-		if (imagesText) {
-			const urls = imagesText.split(',').map(url => url.trim()).filter(url => url);
-			imageUrls.push(...urls);
-		}
-		
-		// También buscar campos individuales (compatibilidad)
+		// Parsear imágenes
+		const imageUrls = [];
 		for (let i = 1; i <= 5; i++) {
 			const imageUrl = formData.get(`image_${i}`)?.toString().trim();
-			if (imageUrl && !imageUrls.includes(imageUrl)) {
+			if (imageUrl) {
 				imageUrls.push(imageUrl);
 			}
 		}
@@ -72,377 +64,375 @@ if (Astro.request.method === "POST") {
 		} else {
 			console.log("🔍 Intentando insertar en Supabase...");
 			
+			// Crear objeto básico de inserción
+			const insertData: any = {
+				title,
+				description,
+				price,
+				stock,
+				category
+			};
+
+			// Agregar campos opcionales solo si tienen valor
+			if (sku) insertData.sku = sku;
+			if (weight) insertData.weight = weight;
+			if (dimensions) insertData.dimensions = dimensions;
+			if (imageUrls.length > 0) insertData.images = imageUrls;
+			if (paymentEnabled) insertData.payment_config = paymentConfig;
+
 			const { data, error: insertError } = await supabase
 				.from("productos")
-				.insert({
-					title,
-					description,
-					price,
-					stock,
-					category,
-					sku,
-					weight,
-					dimensions,
-					images: imageUrls,
-					payment_config: paymentConfig
-				})
+				.insert(insertData)
 				.select();
 
 			if (insertError) {
-				console.error("Error Supabase:", insertError);
+				console.error("❌ Error de Supabase:", insertError);
 				error = `Error de base de datos: ${insertError.message}`;
-			} else {
-				console.log("✅ Producto insertado:", data);
+			} else if (data && data.length > 0) {
+				console.log("✅ Producto creado exitosamente:", data[0]);
 				success = true;
+				// Redireccionar después de éxito
+				return Astro.redirect("/admin/productos");
+			} else {
+				console.error("❌ No se recibieron datos de la inserción");
+				error = "No se pudo crear el producto";
 			}
 		}
-	} catch (err) {
-		console.error("Error procesando formData:", err);
-		error = `Error al procesar el formulario: ${err instanceof Error ? err.message : 'Error desconocido'}`;
+	} catch (e) {
+		console.error("❌ Error del servidor:", e);
+		error = `Error del servidor: ${e}`;
 	}
 }
 ---
 
 <html lang="es">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Nuevo producto - Admin</title>
-		<script src="https://cdn.tailwindcss.com"></script>
-	</head>
-	<body class="bg-gray-100 text-gray-800">
-		<div class="flex min-h-screen">
-			<!-- Sidebar -->
-			<aside class="w-64 bg-purple-700 text-white p-6">
-				<h1 class="text-3xl font-bold mb-8">TuMarca Admin</h1>
-				<nav class="space-y-4">
-					<a href="/admin/productos" class="block hover:bg-purple-600 p-2 rounded">📦 Productos</a>
-					<a href="/admin/nuevo-producto" class="block bg-purple-600 p-2 rounded">➕ Nuevo Producto</a>
-					<a href="/admin/pedidos" class="block hover:bg-purple-600 p-2 rounded">🧾 Pedidos</a>
-					<a href="/" class="block hover:bg-purple-600 p-2 rounded">🔄 Ir al sitio</a>
-				</nav>
-			</aside>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nuevo Producto - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 text-gray-800">
+    <div class="flex min-h-screen">
+      <!-- Sidebar -->
+      <aside class="w-64 bg-purple-700 text-white p-6">
+        <h1 class="text-3xl font-bold mb-8">TuMarca Admin</h1>
+        <nav class="space-y-4">
+          <a href="/admin/productos" class="block hover:bg-purple-600 p-2 rounded">📦 Productos</a>
+          <a href="/admin/nuevo-producto" class="block bg-purple-600 p-2 rounded">➕ Nuevo Producto</a>
+          <a href="/admin/pedidos" class="block hover:bg-purple-600 p-2 rounded">🧾 Pedidos</a>
+          <a href="/" class="block hover:bg-purple-600 p-2 rounded">🔄 Ir al sitio</a>
+        </nav>
+      </aside>
 
-			<!-- Contenido principal -->
-			<main class="flex-1 p-8">
-				<div class="max-w-4xl mx-auto">
-					<h2 class="text-3xl font-bold text-purple-700 mb-8">Agregar nuevo producto</h2>
+      <!-- Contenido principal -->
+      <main class="flex-1 p-8">
+        <div class="max-w-4xl mx-auto">
+          <div class="flex items-center justify-between mb-8">
+            <h2 class="text-3xl font-bold text-purple-700">Nuevo Producto</h2>
+            <a 
+              href="/admin/productos" 
+              class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-300"
+            >
+              ← Volver a Productos
+            </a>
+          </div>
 
-					{error && (
-						<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-							<strong class="font-bold">❌ Error:</strong> {error}
-						</div>
-					)}
+          {error && (
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+              <strong class="font-bold">❌ Error:</strong> {error}
+            </div>
+          )}
 
-					{success ? (
-						<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-							<div class="flex items-center">
-								<span class="text-2xl mr-2">✅</span>
-								<div>
-									<strong class="font-bold">¡Producto creado exitosamente!</strong>
-									<p class="mt-2">El producto se ha agregado correctamente a la base de datos.</p>
-									<div class="mt-4 space-x-4">
-										<a href="/admin/productos" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-											Ver todos los productos
-										</a>
-										<a href="/admin/nuevo-producto" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-											Agregar otro producto
-										</a>
-									</div>
-								</div>
-							</div>
-						</div>
-					) : (
-						<form method="POST" enctype="application/x-www-form-urlencoded" class="space-y-8">
-							<!-- Información básica -->
-							<div class="bg-white p-6 rounded-lg shadow">
-								<h3 class="text-xl font-semibold mb-4 text-gray-800">📝 Información Básica</h3>
-								<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-									<div>
-										<label for="title" class="block font-semibold mb-2">Nombre del producto *</label>
-										<input 
-											type="text" 
-											name="title" 
-											id="title" 
-											required 
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-											placeholder="Ej: Gorra deportiva premium"
-										/>
-									</div>
+          {success && (
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+              <strong class="font-bold">✅ Éxito:</strong> Producto creado correctamente
+            </div>
+          )}
 
-									<div>
-										<label for="sku" class="block font-semibold mb-2">SKU</label>
-										<input 
-											type="text" 
-											name="sku" 
-											id="sku" 
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-											placeholder="Ej: GOR-001"
-										/>
-									</div>
+          <div class="bg-white rounded-lg shadow-lg p-8">
+            <form method="post" class="space-y-8">
+              <!-- Información básica -->
+              <div class="border-b border-gray-200 pb-8">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">📋 Información Básica</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                      Nombre del producto *
+                    </label>
+                    <input 
+                      type="text" 
+                      id="title" 
+                      name="title" 
+                      required 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Nombre del producto"
+                    />
+                  </div>
 
-									<div>
-										<label for="category" class="block font-semibold mb-2">Categoría</label>
-										<select 
-											name="category" 
-											id="category" 
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-										>
-											<option value="">Seleccionar categoría</option>
-											<option value="gorras">Gorras</option>
-											<option value="camisetas">Camisetas</option>
-											<option value="hoodies">Hoodies</option>
-											<option value="accesorios">Accesorios</option>
-											<option value="otros">Otros</option>
-										</select>
-									</div>
+                  <div>
+                    <label for="sku" class="block text-sm font-medium text-gray-700 mb-2">
+                      SKU
+                    </label>
+                    <input 
+                      type="text" 
+                      id="sku" 
+                      name="sku" 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Código del producto"
+                    />
+                  </div>
 
-									<div>
-										<label for="price" class="block font-semibold mb-2">Precio *</label>
-										<div class="relative">
-											<span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-											<input 
-												type="number" 
-												name="price" 
-												id="price" 
-												required 
-												step="0.01" 
-												min="0"
-												class="w-full border border-gray-300 p-3 pl-8 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-												placeholder="0.00"
-											/>
-										</div>
-									</div>
+                  <div>
+                    <label for="price" class="block text-sm font-medium text-gray-700 mb-2">
+                      Precio ($) *
+                    </label>
+                    <input 
+                      type="number" 
+                      id="price" 
+                      name="price" 
+                      step="0.01" 
+                      min="0" 
+                      required 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="0.00"
+                    />
+                  </div>
 
-									<div>
-										<label for="stock" class="block font-semibold mb-2">Inventario *</label>
-										<input 
-											type="number" 
-											name="stock" 
-											id="stock" 
-											required 
-											min="0"
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-											placeholder="0"
-										/>
-									</div>
+                  <div>
+                    <label for="stock" class="block text-sm font-medium text-gray-700 mb-2">
+                      Stock *
+                    </label>
+                    <input 
+                      type="number" 
+                      id="stock" 
+                      name="stock" 
+                      min="0" 
+                      required 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="0"
+                    />
+                  </div>
 
-									<div>
-										<label for="weight" class="block font-semibold mb-2">Peso (kg)</label>
-										<input 
-											type="number" 
-											name="weight" 
-											id="weight" 
-											step="0.01" 
-											min="0"
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-											placeholder="0.00"
-										/>
-									</div>
-								</div>
+                  <div>
+                    <label for="category" class="block text-sm font-medium text-gray-700 mb-2">
+                      Categoría
+                    </label>
+                    <input 
+                      type="text" 
+                      id="category" 
+                      name="category" 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Ej: Electrónicos, Ropa, etc."
+                    />
+                  </div>
 
-								<div class="mt-6">
-									<label for="description" class="block font-semibold mb-2">Descripción *</label>
-									<textarea 
-										name="description" 
-										id="description" 
-										rows="4" 
-										required 
-										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-										placeholder="Describe las características, materiales, beneficios del producto..."
-									></textarea>
-								</div>
+                  <div>
+                    <label for="weight" class="block text-sm font-medium text-gray-700 mb-2">
+                      Peso (kg)
+                    </label>
+                    <input 
+                      type="number" 
+                      id="weight" 
+                      name="weight" 
+                      step="0.01" 
+                      min="0" 
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
 
-								<div class="mt-6">
-									<label for="dimensions" class="block font-semibold mb-2">Dimensiones</label>
-									<input 
-										type="text" 
-										name="dimensions" 
-										id="dimensions" 
-										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-										placeholder="Ej: 25cm x 15cm x 10cm"
-									/>
-								</div>
-							</div>
+                <div class="mt-6">
+                  <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                    Descripción *
+                  </label>
+                  <textarea 
+                    id="description" 
+                    name="description" 
+                    rows="4"
+                    required
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder="Describe tu producto..."
+                  ></textarea>
+                </div>
 
-							<!-- Imágenes -->
-							<div class="bg-white p-6 rounded-lg shadow">
-								<h3 class="text-xl font-semibold mb-4 text-gray-800">🖼️ Imágenes del Producto</h3>
-								<div>
-									<label for="images" class="block font-semibold mb-2">URLs de imágenes</label>
-									<textarea 
-										name="images" 
-										id="images" 
-										rows="4" 
-										class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-										placeholder="Ingresa las URLs de las imágenes separadas por comas:
-https://ejemplo.com/imagen1.jpg,
-https://ejemplo.com/imagen2.jpg,
-https://ejemplo.com/imagen3.jpg"
-									></textarea>
-									<p class="text-sm text-gray-600 mt-2">
-										💡 <strong>Tip:</strong> Puedes usar servicios como <a href="https://imgur.com" target="_blank" class="text-purple-600 hover:underline">Imgur</a> o 
-										<a href="https://cloudinary.com" target="_blank" class="text-purple-600 hover:underline">Cloudinary</a> para subir tus imágenes gratis.
-									</p>
-								</div>
+                <div class="mt-6">
+                  <label for="dimensions" class="block text-sm font-medium text-gray-700 mb-2">
+                    Dimensiones
+                  </label>
+                  <input 
+                    type="text" 
+                    id="dimensions" 
+                    name="dimensions" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder="Ej: 20cm x 15cm x 5cm"
+                  />
+                </div>
+              </div>
 
-								<!-- Preview de imágenes -->
-								<div id="image-preview" class="mt-4 grid-cols-2 md:grid-cols-4 gap-4 hidden">
-									<!-- Las imágenes se mostrarán aquí -->
-								</div>
-							</div>
+              <!-- Imágenes -->
+              <div class="border-b border-gray-200 pb-8">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">🖼️ Imágenes del Producto</h3>
+                <p class="text-sm text-gray-600 mb-6">
+                  Agrega hasta 5 imágenes usando URLs. La primera imagen será la principal.
+                </p>
+                
+                <div class="space-y-4">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <div class="flex items-center space-x-4">
+                      <div class="flex-1">
+                        <input 
+                          type="url" 
+                          name={`image_${i + 1}`} 
+                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder={`URL de imagen ${i + 1}${i === 0 ? ' (principal)' : ''}`}
+                          onchange={`previewImage(this, 'preview_${i + 1}')`}
+                        />
+                      </div>
+                      <div 
+                        id={`preview_${i + 1}`} 
+                        class="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm overflow-hidden"
+                      >
+                        📷
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-							<!-- Configuración de pagos -->
-							<div class="bg-white p-6 rounded-lg shadow">
-								<h3 class="text-xl font-semibold mb-4 text-gray-800">💳 Configuración de Pagos</h3>
-								
-								<div class="mb-6">
-									<label class="flex items-center space-x-3">
-										<input 
-											type="checkbox" 
-											name="paymentEnabled" 
-											id="paymentEnabled"
-											class="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-										/>
-										<span class="font-semibold">Habilitar pagos online para este producto</span>
-									</label>
-									<p class="text-sm text-gray-600 mt-2">Si está deshabilitado, solo se podrá comprar por WhatsApp</p>
-								</div>
+              <!-- Configuración de pagos -->
+              <div class="pb-8">
+                <h3 class="text-xl font-semibold text-gray-800 mb-6">💳 Configuración de Pagos</h3>
+                
+                <div class="mb-6">
+                  <label class="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      name="payment_enabled" 
+                      class="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500"
+                      onchange="togglePaymentConfig(this.checked)"
+                    />
+                    <span class="ml-3 text-sm font-medium text-gray-700">
+                      Habilitar pagos online para este producto
+                    </span>
+                  </label>
+                </div>
 
-								<div id="payment-config" class="space-y-6 hidden">
-									<div>
-										<label for="paymentProvider" class="block font-semibold mb-2">Proveedor de pagos</label>
-										<select 
-											name="paymentProvider" 
-											id="paymentProvider" 
-											class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-										>
-											<option value="stripe">Stripe</option>
-											<option value="paypal">PayPal</option>
-											<option value="mercadopago">Mercado Pago</option>
-										</select>
-									</div>
+                <div id="payment-config" class="space-y-6 hidden">
+                  <!-- Stripe -->
+                  <div class="bg-blue-50 p-6 rounded-lg">
+                    <div class="flex items-center mb-4">
+                      <input 
+                        type="checkbox" 
+                        name="stripe_enabled" 
+                        id="stripe_enabled"
+                        class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label for="stripe_enabled" class="ml-3 text-sm font-medium text-gray-700">
+                        💳 Stripe
+                      </label>
+                    </div>
+                    <input 
+                      type="text" 
+                      name="stripe_price_id" 
+                      placeholder="price_1234567890"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    />
+                  </div>
 
-									<!-- Configuración Stripe -->
-									<div id="stripe-config" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-										<div>
-											<label for="stripeProductId" class="block font-semibold mb-2">Stripe Product ID</label>
-											<input 
-												type="text" 
-												name="stripeProductId" 
-												id="stripeProductId" 
-												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-												placeholder="prod_xxxxxxxxxx"
-											/>
-										</div>
-										<div>
-											<label for="stripePriceId" class="block font-semibold mb-2">Stripe Price ID</label>
-											<input 
-												type="text" 
-												name="stripePriceId" 
-												id="stripePriceId" 
-												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-												placeholder="price_xxxxxxxxxx"
-											/>
-										</div>
-									</div>
+                  <!-- PayPal -->
+                  <div class="bg-yellow-50 p-6 rounded-lg">
+                    <div class="flex items-center mb-4">
+                      <input 
+                        type="checkbox" 
+                        name="paypal_enabled" 
+                        id="paypal_enabled"
+                        class="w-5 h-5 text-yellow-600 bg-gray-100 border-gray-300 rounded focus:ring-yellow-500"
+                      />
+                      <label for="paypal_enabled" class="ml-3 text-sm font-medium text-gray-700">
+                        🟡 PayPal
+                      </label>
+                    </div>
+                    <input 
+                      type="text" 
+                      name="paypal_item_id" 
+                      placeholder="ITEM123"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-sm"
+                    />
+                  </div>
 
-									<!-- Configuración PayPal -->
-									<div id="paypal-config" class="hidden">
-										<div>
-											<label for="paypalProductId" class="block font-semibold mb-2">PayPal Product ID</label>
-											<input 
-												type="text" 
-												name="paypalProductId" 
-												id="paypalProductId" 
-												class="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
-												placeholder="PROD-xxxxxxxxxx"
-											/>
-										</div>
-									</div>
+                  <!-- MercadoPago -->
+                  <div class="bg-cyan-50 p-6 rounded-lg">
+                    <div class="flex items-center mb-4">
+                      <input 
+                        type="checkbox" 
+                        name="mercadopago_enabled" 
+                        id="mercadopago_enabled"
+                        class="w-5 h-5 text-cyan-600 bg-gray-100 border-gray-300 rounded focus:ring-cyan-500"
+                      />
+                      <label for="mercadopago_enabled" class="ml-3 text-sm font-medium text-gray-700">
+                        🔵 MercadoPago
+                      </label>
+                    </div>
+                    <input 
+                      type="text" 
+                      name="mercadopago_preference_id" 
+                      placeholder="123456789-abcd-1234-efgh-567890123456"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
 
-									<div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-										<h4 class="font-semibold text-blue-800 mb-2">📘 Cómo configurar los pagos:</h4>
-										<ul class="text-sm text-blue-700 space-y-1">
-											<li>• <strong>Stripe:</strong> Crea un producto en tu dashboard de Stripe y copia los IDs</li>
-											<li>• <strong>PayPal:</strong> Configura el producto en PayPal Business y obtén el Product ID</li>
-											<li>• <strong>Mercado Pago:</strong> Usa la API de preferencias para generar enlaces de pago</li>
-										</ul>
-									</div>
-								</div>
-							</div>
+              <!-- Botones -->
+              <div class="flex justify-between pt-6">
+                <a 
+                  href="/admin/productos"
+                  class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition duration-300"
+                >
+                  Cancelar
+                </a>
+                <button 
+                  type="submit"
+                  class="bg-purple-700 hover:bg-purple-800 text-white px-8 py-3 rounded-lg transition duration-300 font-semibold"
+                >
+                  💾 Crear Producto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
 
-							<!-- Botones de acción -->
-							<div class="flex justify-end space-x-4">
-								<a 
-									href="/admin/productos" 
-									class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition duration-300"
-								>
-									Cancelar
-								</a>
-								<button 
-									type="submit" 
-									class="bg-purple-700 hover:bg-purple-800 text-white px-8 py-3 rounded-lg transition duration-300 font-semibold"
-								>
-									💾 Crear Producto
-								</button>
-							</div>
-						</form>
-					)}
-				</div>
-			</main>
-		</div>
+    <script is:inline>
+      function previewImage(input, previewId) {
+        const preview = document.getElementById(previewId);
+        const url = input.value.trim();
+        
+        if (url) {
+          const img = new Image();
+          img.onload = function() {
+            preview.innerHTML = `<img src="${url}" alt="Preview" class="w-full h-full object-cover" />`;
+          };
+          img.onerror = function() {
+            preview.innerHTML = '❌';
+          };
+          img.src = url;
+        } else {
+          preview.innerHTML = '📷';
+        }
+      }
 
-		<script is:inline>
-			// Preview de imágenes
-			document.getElementById('images').addEventListener('input', function(e) {
-				const urls = e.target.value.split(',').map(url => url.trim()).filter(url => url);
-				const preview = document.getElementById('image-preview');
-				
-				if (urls.length > 0) {
-					preview.classList.remove('hidden');
-					preview.innerHTML = '';
-					
-					urls.forEach(url => {
-						const div = document.createElement('div');
-						div.className = 'relative group';
-						div.innerHTML = `
-							<img src="${url}" alt="Preview" class="w-full h-32 object-cover rounded-lg border border-gray-300" 
-								 onerror="this.parentElement.innerHTML='<div class=\\'w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500\\'>❌ URL inválida</div>'" />
-						`;
-						preview.appendChild(div);
-					});
-				} else {
-					preview.classList.add('hidden');
-				}
-			});
-
-			// Configuración de pagos
-			document.getElementById('paymentEnabled').addEventListener('change', function(e) {
-				const config = document.getElementById('payment-config');
-				if (e.target.checked) {
-					config.classList.remove('hidden');
-				} else {
-					config.classList.add('hidden');
-				}
-			});
-
-			// Cambio de proveedor de pagos
-			document.getElementById('paymentProvider').addEventListener('change', function(e) {
-				const stripeConfig = document.getElementById('stripe-config');
-				const paypalConfig = document.getElementById('paypal-config');
-				
-				// Ocultar todas las configuraciones
-				stripeConfig.classList.add('hidden');
-				paypalConfig.classList.add('hidden');
-				
-				// Mostrar la configuración correspondiente
-				if (e.target.value === 'stripe') {
-					stripeConfig.classList.remove('hidden');
-				} else if (e.target.value === 'paypal') {
-					paypalConfig.classList.remove('hidden');
-				}
-			});
-		</script>
-	</body>
+      function togglePaymentConfig(enabled) {
+        const config = document.getElementById('payment-config');
+        if (enabled) {
+          config.classList.remove('hidden');
+        } else {
+          config.classList.add('hidden');
+        }
+      }
+    </script>
+  </body>
 </html>

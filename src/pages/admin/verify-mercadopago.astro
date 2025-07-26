@@ -1,0 +1,209 @@
+---
+export const prerender = false;
+---
+
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verificación MercadoPago - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <div class="container mx-auto px-6 py-8">
+      <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">🔍 Verificación de Credenciales MercadoPago</h1>
+        
+        <!-- Estado de verificación -->
+        <div id="verification-status" class="mb-8">
+          <div class="bg-blue-500 text-white p-4 rounded-lg">
+            <div class="flex items-center">
+              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+              <span>Verificando credenciales...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados -->
+        <div id="results" class="hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Estado general -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h2 class="text-xl font-semibold mb-4">📊 Estado General</h2>
+              <div id="general-status" class="space-y-2">
+                <!-- Se cargará dinámicamente -->
+              </div>
+            </div>
+
+            <!-- Detalles técnicos -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+              <h2 class="text-xl font-semibold mb-4">⚙️ Detalles Técnicos</h2>
+              <div id="technical-details" class="space-y-2">
+                <!-- Se cargará dinámicamente -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Prueba de checkout -->
+          <div class="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h2 class="text-xl font-semibold mb-4">🧪 Prueba de Checkout</h2>
+            <p class="text-gray-600 mb-4">Si las credenciales son válidas, puedes probar el checkout con un producto de prueba:</p>
+            <div id="checkout-test" class="space-y-4">
+              <!-- Se cargará dinámicamente -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Información de credenciales -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-6">
+          <h2 class="text-xl font-semibold mb-4">🔐 Credenciales Configuradas</h2>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <strong>Access Token:</strong>
+                <div class="font-mono text-xs text-gray-600 mt-1">APP_USR-5343888999883095-072214-...</div>
+              </div>
+              <div>
+                <strong>Public Key:</strong>
+                <div class="font-mono text-xs text-gray-600 mt-1">APP_USR-7f9096d6-84ea-4e1c-...</div>
+              </div>
+              <div>
+                <strong>Client ID:</strong>
+                <div class="font-mono text-xs text-gray-600 mt-1">5343888999883095</div>
+              </div>
+              <div>
+                <strong>Environment:</strong>
+                <div class="text-green-600 font-semibold mt-1">🟢 PRODUCCIÓN</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acciones -->
+        <div class="mt-8 flex space-x-4">
+          <button 
+            onclick="verifyCredentials()" 
+            class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg"
+          >
+            🔄 Verificar Nuevamente
+          </button>
+          <a 
+            href="/admin/productos" 
+            class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg"
+          >
+            ← Volver al Admin
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      async function verifyCredentials() {
+        const statusDiv = document.getElementById('verification-status');
+        const resultsDiv = document.getElementById('results');
+        
+        // Mostrar loading
+        statusDiv.innerHTML = `
+          <div class="bg-blue-500 text-white p-4 rounded-lg">
+            <div class="flex items-center">
+              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+              <span>Verificando credenciales...</span>
+            </div>
+          </div>
+        `;
+        resultsDiv.classList.add('hidden');
+
+        try {
+          const response = await fetch('/api/mercadopago/verify-credentials');
+          const data = await response.json();
+
+          if (data.success) {
+            // Éxito
+            statusDiv.innerHTML = `
+              <div class="bg-green-500 text-white p-4 rounded-lg">
+                <div class="flex items-center">
+                  <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>✅ Credenciales válidas y funcionando correctamente</span>
+                </div>
+              </div>
+            `;
+
+            // Mostrar detalles
+            document.getElementById('general-status').innerHTML = `
+              <div class="flex items-center text-green-600">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <span>Credenciales configuradas correctamente</span>
+              </div>
+              <div class="flex items-center text-green-600">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <span>Conexión con MercadoPago exitosa</span>
+              </div>
+              <div class="flex items-center text-green-600">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <span>Entorno: ${data.details.environment}</span>
+              </div>
+            `;
+
+            document.getElementById('technical-details').innerHTML = `
+              <div><strong>Preference ID:</strong> ${data.details.preferenceId}</div>
+              <div><strong>Timestamp:</strong> ${new Date(data.details.timestamp).toLocaleString()}</div>
+              <div><strong>Public Key:</strong> ${data.details.publicKey}</div>
+            `;
+
+            document.getElementById('checkout-test').innerHTML = `
+              <p class="text-green-600 mb-4">✅ Las credenciales son válidas. Puedes probar el checkout:</p>
+              <a href="${data.details.checkoutUrl}" target="_blank" 
+                 class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg inline-block">
+                🧪 Probar Checkout de Prueba
+              </a>
+              <p class="text-xs text-gray-500 mt-2">Se abrirá en una nueva pestaña</p>
+            `;
+
+          } else {
+            // Error
+            statusDiv.innerHTML = `
+              <div class="bg-red-500 text-white p-4 rounded-lg">
+                <div class="flex items-center">
+                  <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                  <span>❌ Error en las credenciales: ${data.error}</span>
+                </div>
+              </div>
+            `;
+
+            document.getElementById('general-status').innerHTML = `
+              <div class="text-red-600">❌ ${data.error}</div>
+              <div class="text-gray-600">${data.details}</div>
+            `;
+          }
+
+        } catch (error) {
+          statusDiv.innerHTML = `
+            <div class="bg-red-500 text-white p-4 rounded-lg">
+              <div class="flex items-center">
+                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                <span>❌ Error de conexión: ${error.message}</span>
+              </div>
+            </div>
+          `;
+        }
+
+        resultsDiv.classList.remove('hidden');
+      }
+
+      // Verificar automáticamente al cargar la página
+      document.addEventListener('DOMContentLoaded', verifyCredentials);
+    </script>
+  </body>
+</html>

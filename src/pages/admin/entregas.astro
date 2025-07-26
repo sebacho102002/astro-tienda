@@ -1,0 +1,560 @@
+---
+// 🚛 Panel de gestión de entregas
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { supabase } from '../../lib/supabaseClient';
+
+// Obtener pedidos listos para entrega y en proceso de entrega
+let pedidos: any[] = [];
+let error: string | null = null;
+let estadisticas = {
+  listos: 0,
+  enviados: 0,
+  enTransito: 0,
+  entregados: 0,
+  promedioDias: 0
+};
+
+try {
+  const { data, error: pedidosError } = await supabase
+    .from('pedidos')
+    .select(`
+      *,
+      productos:producto_id (
+        id,
+        title,
+        sku,
+        price,
+        images
+      )
+    `)
+    .in('status', ['pagado', 'confirmado', 'preparando', 'enviado', 'en_transito', 'entregado'])
+    .order('created_at', { ascending: false });
+
+  if (pedidosError) {
+    throw pedidosError;
+  }
+
+  pedidos = data || [];
+  
+  // Calcular estadísticas
+  estadisticas = {
+    listos: pedidos.filter(p => ['pagado', 'confirmado', 'preparando'].includes(p.status)).length,
+    enviados: pedidos.filter(p => p.status === 'enviado').length,
+    enTransito: pedidos.filter(p => p.status === 'en_transito').length,
+    entregados: pedidos.filter(p => p.status === 'entregado').length,
+    promedioDias: 0 // Se calculará con los entregados
+  };
+  
+  // Calcular promedio de días de entrega
+  const entregados = pedidos.filter(p => p.status === 'entregado' && p.fecha_entrega_real);
+  if (entregados.length > 0) {
+    const totalDias = entregados.reduce((sum, p) => {
+      const inicio = new Date(p.created_at);
+      const fin = new Date(p.fecha_entrega_real);
+      const dias = Math.ceil((fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+      return sum + dias;
+    }, 0);
+    estadisticas.promedioDias = Math.round(totalDias / entregados.length);
+  }
+  
+} catch (e: any) {
+  console.error('Error cargando pedidos:', e);
+  error = e instanceof Error ? e.message : 'Error desconocido';
+}
+
+// Función para formatear precio
+function formatPrice(price: number) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP'
+  }).format(price);
+}
+
+// Función para obtener colores del estado
+function getEstadoColor(estado: string) {
+  const colores = {
+    'pagado': 'bg-blue-100 text-blue-800',
+    'confirmado': 'bg-blue-100 text-blue-800',
+    'preparando': 'bg-orange-100 text-orange-800',
+    'enviado': 'bg-indigo-100 text-indigo-800',
+    'en_transito': 'bg-indigo-100 text-indigo-800',
+    'entregado': 'bg-green-100 text-green-800'
+  };
+  return colores[estado as keyof typeof colores] || 'bg-gray-100 text-gray-800';
+}
+
+// Función para obtener prioridad de entrega
+function getPrioridad(pedido: any) {
+  const ahora = new Date();
+  const fechaPedido = new Date(pedido.created_at);
+  const diasDesdeCreacion = Math.ceil((ahora.getTime() - fechaPedido.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (diasDesdeCreacion > 5) return { nivel: 'alta', color: 'red', texto: 'Alta' };
+  if (diasDesdeCreacion > 3) return { nivel: 'media', color: 'yellow', texto: 'Media' };
+  return { nivel: 'normal', color: 'green', texto: 'Normal' };
+}
+---
+
+<DashboardLayout title="Gestión de Entregas">
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">🚛 Gestión de Entregas</h1>
+        <p class="text-gray-600">Administra y supervisa todas las entregas</p>
+      </div>
+    </div>
+
+    <!-- Estadísticas de entregas -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div class="bg-orange-50 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-orange-700">{estadisticas.listos}</div>
+        <div class="text-sm text-orange-600">Listos para Envío</div>
+      </div>
+      <div class="bg-indigo-50 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-indigo-700">{estadisticas.enviados}</div>
+        <div class="text-sm text-indigo-600">Enviados</div>
+      </div>
+      <div class="bg-blue-50 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-blue-700">{estadisticas.enTransito}</div>
+        <div class="text-sm text-blue-600">En Tránsito</div>
+      </div>
+      <div class="bg-green-50 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-green-700">{estadisticas.entregados}</div>
+        <div class="text-sm text-green-600">Entregados</div>
+      </div>
+      <div class="bg-gray-50 p-4 rounded-lg text-center">
+        <div class="text-2xl font-bold text-gray-700">{estadisticas.promedioDias}</div>
+        <div class="text-sm text-gray-600">Días Promedio</div>
+      </div>
+    </div>
+
+    <!-- Filtros rápidos -->
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="window.filtrarPedidos('todos')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm transition-colors">
+          📦 Todos
+        </button>
+        <button onclick="window.filtrarPedidos('listos')" class="px-4 py-2 bg-orange-100 hover:bg-orange-200 text-orange-800 rounded-lg text-sm transition-colors">
+          🎯 Listos para Envío
+        </button>
+        <button onclick="window.filtrarPedidos('enviados')" class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-lg text-sm transition-colors">
+          🚛 Enviados
+        </button>
+        <button onclick="window.filtrarPedidos('urgentes')" class="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg text-sm transition-colors">
+          🚨 Urgentes
+        </button>
+      </div>
+    </div>
+
+    <!-- Error handling -->
+    {error && (
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+        <h3 class="text-red-800 font-semibold">Error cargando pedidos</h3>
+        <p class="text-red-700 text-sm">{error}</p>
+      </div>
+    )}
+
+    <!-- Lista de pedidos para entrega -->
+    {!error && (
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Pedidos en Proceso de Entrega ({pedidos.length})
+          </h2>
+        </div>
+
+        {pedidos.length === 0 ? (
+          <div class="p-8 text-center text-gray-500">
+            <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              🚛
+            </div>
+            <p>No hay pedidos en proceso de entrega</p>
+          </div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pedido
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cliente
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Entrega
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Prioridad
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200" id="tabla-pedidos">
+                {pedidos.map((pedido: any) => {
+                  const prioridad = getPrioridad(pedido);
+                  return (
+                    <tr class="hover:bg-gray-50 pedido-row" data-estado={pedido.status}>
+                      <td class="px-4 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">
+                          #{pedido.numero_pedido || pedido.id.slice(0, 8)}
+                        </div>
+                        <div class="text-xs text-blue-600">
+                          {pedido.numero_seguimiento}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                          {new Date(pedido.created_at).toLocaleDateString('es-ES')}
+                        </div>
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">
+                          {pedido.cliente_nombre}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                          {pedido.cliente_email}
+                        </div>
+                        {pedido.cliente_telefono && (
+                          <div class="text-xs text-gray-500">
+                            📞 {pedido.cliente_telefono}
+                          </div>
+                        )}
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                          {pedido.productos?.images?.[0] && (
+                            <img 
+                              class="h-8 w-8 rounded object-cover mr-2" 
+                              src={pedido.productos.images[0]} 
+                              alt={pedido.productos?.title}
+                            />
+                          )}
+                          <div>
+                            <div class="text-xs font-medium text-gray-900">
+                              {pedido.productos?.title || 'Producto eliminado'}
+                            </div>
+                            <div class="text-xs text-gray-500">
+                              Qty: {pedido.cantidad} • {formatPrice(pedido.precio_total)}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap">
+                        <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(pedido.status)}`}>
+                          {pedido.status}
+                        </span>
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap text-xs">
+                        <div class="space-y-1">
+                          {pedido.transportadora && (
+                            <div class="text-gray-600">
+                              <strong>Transportadora:</strong> {pedido.transportadora}
+                            </div>
+                          )}
+                          {pedido.numero_guia && (
+                            <div class="text-gray-600">
+                              <strong>Guía:</strong> {pedido.numero_guia}
+                            </div>
+                          )}
+                          {pedido.fecha_estimada_entrega && (
+                            <div class="text-gray-600">
+                              <strong>Estimada:</strong> {new Date(pedido.fecha_estimada_entrega).toLocaleDateString('es-ES')}
+                            </div>
+                          )}
+                          {pedido.direccion_entrega && (
+                            <div class="text-gray-600 truncate max-w-xs">
+                              <strong>Dirección:</strong> {pedido.direccion_entrega}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap">
+                        <span class={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${prioridad.color}-100 text-${prioridad.color}-800`}>
+                          {prioridad.texto}
+                        </span>
+                      </td>
+                      <td class="px-4 py-4 whitespace-nowrap text-xs">
+                        <div class="flex flex-col space-y-1">
+                          <button 
+                            onclick={`window.gestionarEntrega('${pedido.id}')`}
+                            class="text-purple-600 hover:text-purple-900 text-left"
+                          >
+                            🚛 Gestionar
+                          </button>
+                          <button 
+                            onclick={`window.marcarEnviado('${pedido.id}')`}
+                            class="text-blue-600 hover:text-blue-900 text-left"
+                          >
+                            📦 Marcar Enviado
+                          </button>
+                          <button 
+                            onclick={`window.marcarEntregado('${pedido.id}')`}
+                            class="text-green-600 hover:text-green-900 text-left"
+                          >
+                            ✅ Marcar Entregado
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+
+  <!-- Modal para gestionar entrega (reutilizado del admin/pedidos) -->
+  <div id="modal-entrega" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+    <div class="flex items-center justify-center min-h-full p-4">
+      <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+        <h3 class="text-lg font-semibold mb-4">🚛 Gestionar Entrega</h3>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Transportadora</label>
+            <select id="transportadora" class="w-full p-2 border border-gray-300 rounded-lg">
+              <option value="">Seleccionar transportadora</option>
+              <option value="Servientrega">Servientrega</option>
+              <option value="Coordinadora">Coordinadora</option>
+              <option value="TCC">TCC</option>
+              <option value="Interrapidisimo">Interrapidísimo</option>
+              <option value="Entrega Propia">Entrega Propia</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Número de Guía</label>
+            <input 
+              type="text" 
+              id="numero-guia" 
+              placeholder="Ingresa el número de guía"
+              class="w-full p-2 border border-gray-300 rounded-lg"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fecha Estimada de Entrega</label>
+            <input 
+              type="date" 
+              id="fecha-estimada" 
+              class="w-full p-2 border border-gray-300 rounded-lg"
+            >
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Dirección de Entrega</label>
+            <textarea 
+              id="direccion-entrega" 
+              placeholder="Dirección completa de entrega"
+              class="w-full p-2 border border-gray-300 rounded-lg h-20 resize-none"
+            ></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Notas de Entrega</label>
+            <textarea 
+              id="notas-entrega" 
+              placeholder="Notas especiales para la entrega"
+              class="w-full p-2 border border-gray-300 rounded-lg h-16 resize-none"
+            ></textarea>
+          </div>
+        </div>
+        
+        <div class="flex space-x-3 mt-6">
+          <button 
+            onclick="window.cerrarModal('modal-entrega')"
+            class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+          >
+            Cancelar
+          </button>
+          <button 
+            onclick="window.confirmarGestionEntrega()"
+            class="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700"
+          >
+            Guardar Entrega
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ pedidos }}>
+    let pedidoIdActual = '';
+
+    // 🌍 FUNCIONES GLOBALES (asignadas a window para acceso desde onclick)
+    
+    // Filtrar pedidos por estado
+    window.filtrarPedidos = function(filtro) {
+      console.log('🔍 Filtrando pedidos por:', filtro);
+      const filas = document.querySelectorAll('.pedido-row');
+      
+      filas.forEach(fila => {
+        const estado = fila.getAttribute('data-estado');
+        let mostrar = false;
+        
+        switch(filtro) {
+          case 'todos':
+            mostrar = true;
+            break;
+          case 'listos':
+            mostrar = ['pagado', 'confirmado', 'preparando'].includes(estado);
+            break;
+          case 'enviados':
+            mostrar = ['enviado', 'en_transito'].includes(estado);
+            break;
+          case 'urgentes':
+            // Lógica para pedidos urgentes (más de 5 días)
+            const fechaTexto = fila.querySelector('.text-xs.text-gray-500').textContent;
+            const fecha = new Date(fechaTexto.split(' ')[0]);
+            const ahora = new Date();
+            const dias = Math.ceil((ahora - fecha) / (1000 * 60 * 60 * 24));
+            mostrar = dias > 5;
+            break;
+        }
+        
+        fila.style.display = mostrar ? 'table-row' : 'none';
+      });
+      
+      console.log(`✅ Filtro aplicado: ${filtro}`);
+    };
+
+    // Gestionar entrega
+    window.gestionarEntrega = function(pedidoId) {
+      console.log('🚛 Gestionando entrega para:', pedidoId);
+      pedidoIdActual = pedidoId;
+      const pedido = pedidos.find(p => p.id === pedidoId);
+      
+      if (pedido) {
+        document.getElementById('transportadora').value = pedido.transportadora || '';
+        document.getElementById('numero-guia').value = pedido.numero_guia || '';
+        document.getElementById('direccion-entrega').value = pedido.direccion_entrega || pedido.direccion_envio || '';
+        document.getElementById('notas-entrega').value = pedido.notas_entrega || '';
+        
+        if (pedido.fecha_estimada_entrega) {
+          document.getElementById('fecha-estimada').value = new Date(pedido.fecha_estimada_entrega).toISOString().split('T')[0];
+        }
+        
+        console.log('📋 Datos del pedido cargados en modal');
+      }
+      
+      document.getElementById('modal-entrega').classList.remove('hidden');
+    };
+
+    // Marcar como enviado
+    window.marcarEnviado = async function(pedidoId) {
+      console.log('📦 Marcando como enviado:', pedidoId);
+      if (!confirm('¿Marcar este pedido como enviado?')) return;
+      
+      try {
+        const response = await fetch('/api/pedidos/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId: pedidoId,
+            nuevoEstado: 'enviado',
+            observaciones: 'Pedido marcado como enviado desde panel de entregas'
+          })
+        });
+
+        const result = await response.json();
+        console.log('📄 Resultado marcar enviado:', result);
+        
+        if (result.success) {
+          alert('✅ Pedido marcado como enviado');
+          location.reload();
+        } else {
+          alert('❌ Error: ' + result.error);
+        }
+      } catch (error) {
+        console.error('❌ Error:', error);
+        alert('❌ Error de conexión');
+      }
+    };
+
+    // Marcar como entregado
+    window.marcarEntregado = async function(pedidoId) {
+      console.log('✅ Marcando como entregado:', pedidoId);
+      if (!confirm('¿Confirmar que este pedido fue entregado?')) return;
+      
+      try {
+        const response = await fetch('/api/pedidos/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId: pedidoId,
+            nuevoEstado: 'entregado',
+            observaciones: 'Pedido entregado exitosamente'
+          })
+        });
+
+        const result = await response.json();
+        console.log('📄 Resultado marcar entregado:', result);
+        
+        if (result.success) {
+          alert('✅ Pedido marcado como entregado');
+          location.reload();
+        } else {
+          alert('❌ Error: ' + result.error);
+        }
+      } catch (error) {
+        console.error('❌ Error:', error);
+        alert('❌ Error de conexión');
+      }
+    };
+
+    // Cerrar modal
+    window.cerrarModal = function(modalId) {
+      console.log('❌ Cerrando modal:', modalId);
+      document.getElementById(modalId).classList.add('hidden');
+    };
+
+    // Confirmar gestión de entrega
+    window.confirmarGestionEntrega = async function() {
+      console.log('💾 Confirmando gestión de entrega');
+      const datosEntrega = {
+        pedidoId: pedidoIdActual,
+        transportadora: document.getElementById('transportadora')?.value,
+        numeroGuia: document.getElementById('numero-guia')?.value,
+        fechaEstimada: document.getElementById('fecha-estimada')?.value,
+        direccionEntrega: document.getElementById('direccion-entrega')?.value,
+        notasEntrega: document.getElementById('notas-entrega')?.value
+      };
+      
+      console.log('📋 Datos de entrega:', datosEntrega);
+      
+      try {
+        const response = await fetch('/api/pedidos/update-entrega', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(datosEntrega)
+        });
+
+        const result = await response.json();
+        console.log('📄 Resultado gestión entrega:', result);
+        
+        if (result.success) {
+          alert('✅ Información de entrega actualizada');
+          window.cerrarModal('modal-entrega');
+          location.reload();
+        } else {
+          alert('❌ Error: ' + result.error);
+        }
+      } catch (error) {
+        console.error('❌ Error:', error);
+        alert('❌ Error de conexión');
+      }
+    };
+  </script>
+</DashboardLayout>

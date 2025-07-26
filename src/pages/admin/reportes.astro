@@ -2,137 +2,132 @@
 export const prerender = false;
 
 import DashboardLayout from "../../layouts/DashboardLayout.astro";
-import StatCard from "../../components/StatCard.astro";
-import { supabase } from "../../lib/supabaseClient.js";
+import { supabase } from '../../lib/supabaseClient';
 
-// Definir rangos de fechas
-const hoy = new Date();
-const hace7dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-const hace30dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-const inicioAño = new Date(hoy.getFullYear(), 0, 1);
+// Función para obtener datos de ventas por período
+async function getVentasPorPeriodo(dias: number) {
+  const fechaInicio = new Date();
+  fechaInicio.setDate(fechaInicio.getDate() - dias);
+  
+  const { data } = await supabase
+    .from('pedidos')
+    .select('created_at, precio_total, status, cliente_email, producto_id')
+    .gte('created_at', fechaInicio.toISOString())
+    .in('status', ['pagado', 'enviado', 'entregado'])
+    .order('created_at', { ascending: false });
+    
+  return data || [];
+}
 
-// Obtener datos para reportes
-const [
-  ventasHoy,
-  ventasSemana,
-  ventasMes,
-  ventasAño,
-  pedidosPorEstado,
-  productosMasVendidos,
-  clientesFrecuentes
-] = await Promise.all([
-  // Ventas de hoy
-  supabase
-    .from('pedidos')
-    .select('precio_total, status')
-    .gte('created_at', hoy.toISOString().split('T')[0])
-    .in('status', ['pagado', 'enviado', 'entregado']),
-    
-  // Ventas últimos 7 días
-  supabase
-    .from('pedidos')
-    .select('precio_total, status, created_at')
-    .gte('created_at', hace7dias.toISOString())
-    .in('status', ['pagado', 'enviado', 'entregado']),
-    
-  // Ventas del mes
-  supabase
-    .from('pedidos')
-    .select('precio_total, status')
-    .gte('created_at', inicioMes.toISOString())
-    .in('status', ['pagado', 'enviado', 'entregado']),
-    
-  // Ventas del año
-  supabase
-    .from('pedidos')
-    .select('precio_total, status')
-    .gte('created_at', inicioAño.toISOString())
-    .in('status', ['pagado', 'enviado', 'entregado']),
-    
-  // Pedidos por estado
-  supabase
-    .from('pedidos')
-    .select('status, created_at')
-    .gte('created_at', hace30dias.toISOString()),
-    
-  // Productos más vendidos
-  supabase
+// Función para obtener productos más vendidos con detalles
+async function getProductosMasVendidos(limite: number = 10) {
+  const { data } = await supabase
     .from('pedidos')
     .select(`
-      cantidad, 
-      productos:producto_id (id, title, price)
+      producto_id,
+      productos(name, price, stock, image_url)
     `)
     .in('status', ['pagado', 'enviado', 'entregado'])
-    .gte('created_at', hace30dias.toISOString()),
+    .not('producto_id', 'is', null);
     
-  // Clientes frecuentes
-  supabase
+  if (!data) return [];
+  
+  // Agrupar por producto
+  const productosMap = new Map();
+  data.forEach(pedido => {
+    const producto = Array.isArray(pedido.productos) ? pedido.productos[0] : pedido.productos;
+    if (producto) {
+      const key = pedido.producto_id;
+      if (productosMap.has(key)) {
+        productosMap.get(key).ventas += 1;
+        productosMap.get(key).ingresos += producto.price || 0;
+      } else {
+        productosMap.set(key, {
+          ...producto,
+          id: key,
+          ventas: 1,
+          ingresos: producto.price || 0
+        });
+      }
+    }
+  });
+  
+  return Array.from(productosMap.values())
+    .sort((a, b) => b.ventas - a.ventas)
+    .slice(0, limite);
+}
+
+// Función para obtener estadísticas de clientes
+async function getEstadisticasClientes() {
+  const { data } = await supabase
     .from('pedidos')
-    .select('cliente_email, cliente_nombre, precio_total')
-    .in('status', ['pagado', 'enviado', 'entregado'])
-    .gte('created_at', hace30dias.toISOString())
+    .select('cliente_email, precio_total, created_at, status')
+    .not('cliente_email', 'is', null);
+    
+  if (!data) return { totalClientes: 0, clientesRecurrentes: 0, promedioCompras: 0, topClientes: [] };
+  
+  const clientesMap = new Map();
+  
+  data.forEach(pedido => {
+    const email = pedido.cliente_email;
+    if (clientesMap.has(email)) {
+      clientesMap.get(email).pedidos += 1;
+      if (['pagado', 'enviado', 'entregado'].includes(pedido.status)) {
+        clientesMap.get(email).total += parseFloat(pedido.precio_total) || 0;
+      }
+    } else {
+      clientesMap.set(email, {
+        email,
+        pedidos: 1,
+        total: ['pagado', 'enviado', 'entregado'].includes(pedido.status) ? 
+               parseFloat(pedido.precio_total) || 0 : 0,
+        ultimaCompra: pedido.created_at
+      });
+    }
+  });
+  
+  const clientes = Array.from(clientesMap.values());
+  
+  return {
+    totalClientes: clientes.length,
+    clientesRecurrentes: clientes.filter(c => c.pedidos > 1).length,
+    promedioCompras: clientes.length > 0 ? 
+      clientes.reduce((sum, c) => sum + c.total, 0) / clientes.length : 0,
+    topClientes: clientes
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10)
+  };
+}
+
+// Obtener el período seleccionado (por defecto 30 días)
+const url = new URL(Astro.request.url);
+const periodo = parseInt(url.searchParams.get('periodo') || '30');
+
+// Obtener todos los datos
+const [ventasPeriodo, productosMasVendidos, estadisticasClientes] = await Promise.all([
+  getVentasPorPeriodo(periodo),
+  getProductosMasVendidos(),
+  getEstadisticasClientes()
 ]);
 
-// Procesar datos
-const reportes = {
-  ventasHoy: ventasHoy.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
-  ventasSemana: ventasSemana.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
-  ventasMes: ventasMes.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
-  ventasAño: ventasAño.data?.reduce((sum, v) => sum + (v.precio_total || 0), 0) || 0,
-  
-  pedidosHoy: ventasHoy.data?.length || 0,
-  pedidosSemana: ventasSemana.data?.length || 0,
-  pedidosMes: ventasMes.data?.length || 0,
-  
-  // Agrupar pedidos por estado
-  estadosPedidos: pedidosPorEstado.data?.reduce((acc: any, pedido: any) => {
-    acc[pedido.status] = (acc[pedido.status] || 0) + 1;
-    return acc;
-  }, {}) || {},
-  
-  // Productos más vendidos
-  topProductos: (() => {
-    const productosMap = new Map();
-    productosMasVendidos.data?.forEach((pedido: any) => {
-      if (pedido.productos) {
-        const key = pedido.productos.id;
-        const current = productosMap.get(key) || { 
-          ...pedido.productos, 
-          cantidadVendida: 0, 
-          ingresoGenerado: 0 
-        };
-        current.cantidadVendida += pedido.cantidad || 0;
-        current.ingresoGenerado += (pedido.cantidad || 0) * (pedido.productos.price || 0);
-        productosMap.set(key, current);
-      }
-    });
-    
-    return Array.from(productosMap.values())
-      .sort((a, b) => b.cantidadVendida - a.cantidadVendida)
-      .slice(0, 5);
-  })(),
-  
-  // Clientes más valiosos
-  topClientes: (() => {
-    const clientesMap = new Map();
-    clientesFrecuentes.data?.forEach((pedido: any) => {
-      const email = pedido.cliente_email;
-      const current = clientesMap.get(email) || { 
-        email, 
-        nombre: pedido.cliente_nombre || email,
-        totalCompras: 0,
-        numeroPedidos: 0
-      };
-      current.totalCompras += pedido.precio_total || 0;
-      current.numeroPedidos += 1;
-      clientesMap.set(email, current);
-    });
-    
-    return Array.from(clientesMap.values())
-      .sort((a, b) => b.totalCompras - a.totalCompras)
-      .slice(0, 5);
-  })()
+// Calcular métricas del período
+const ingresosPeriodo = ventasPeriodo.reduce((sum, v) => sum + (parseFloat(v.precio_total) || 0), 0);
+const ventasPorDia = ventasPeriodo.reduce((acc, venta) => {
+  const fecha = new Date(venta.created_at).toISOString().split('T')[0];
+  acc[fecha] = (acc[fecha] || 0) + (parseFloat(venta.precio_total) || 0);
+  return acc;
+}, {} as Record<string, number>);
+
+// Preparar datos para gráficos
+const fechas = Object.keys(ventasPorDia).sort();
+const chartDataReportes = {
+  fechas: fechas.map(f => new Date(f).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })),
+  ventas: fechas.map(f => ventasPorDia[f]),
+  productos: productosMasVendidos.slice(0, 8).map(p => ({
+    nombre: p.name?.substring(0, 20) + (p.name?.length > 20 ? '...' : ''),
+    ventas: p.ventas,
+    ingresos: p.ingresos
+  }))
 };
 
 function formatPrice(price: number) {
@@ -142,112 +137,205 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
-function calcularCrecimiento(actual: number, anterior: number) {
-  if (anterior === 0) return actual > 0 ? 100 : 0;
-  return Math.round(((actual - anterior) / anterior) * 100);
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString('es-ES', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 }
-
-// Calcular tendencias (comparar con período anterior)
-const crecimientoSemanal = calcularCrecimiento(reportes.ventasSemana, reportes.ventasMes / 4);
-const crecimientoMensual = calcularCrecimiento(reportes.ventasMes, reportes.ventasAño / 12);
 ---
 
-<DashboardLayout title="Reportes y Analytics">
-  <div class="space-y-8">
-    
-    <!-- Métricas de Ventas -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-      <StatCard
-        title="Ventas Hoy"
-        value={formatPrice(reportes.ventasHoy)}
-        description={`${reportes.pedidosHoy} pedidos`}
-        color="green"
-        icon="💰"
-      />
+<DashboardLayout title="Reportes Avanzados">
+  <div class="min-h-screen bg-gray-50 py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       
-      <StatCard
-        title="Ventas Esta Semana"
-        value={formatPrice(reportes.ventasSemana)}
-        description={`${reportes.pedidosSemana} pedidos | ${crecimientoSemanal >= 0 ? '↗️' : '↘️'} ${Math.abs(crecimientoSemanal)}%`}
-        color="blue"
-        icon="📈"
-      />
-      
-      <StatCard
-        title="Ventas Este Mes"
-        value={formatPrice(reportes.ventasMes)}
-        description={`${reportes.pedidosMes} pedidos | ${crecimientoMensual >= 0 ? '↗️' : '↘️'} ${Math.abs(crecimientoMensual)}%`}
-        color="purple"
-        icon="📊"
-      />
-      
-      <StatCard
-        title="Ventas Este Año"
-        value={formatPrice(reportes.ventasAño)}
-        description="Total acumulado"
-        color="yellow"
-        icon="🏆"
-      />
-    </div>
-
-    <!-- Gráficos y Tablas -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      
-      <!-- Estados de Pedidos -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">📊 Pedidos por Estado (30 días)</h2>
-        </div>
-        <div class="p-6">
-          <div class="space-y-4">
-            {Object.entries(reportes.estadosPedidos).map(([estado, cantidad]: [string, any]) => {
-              const total = Object.values(reportes.estadosPedidos).reduce((a: number, b: any) => a + (b as number), 0);
-              const porcentaje = Math.round((cantidad / total) * 100);
-              
-              const colores: any = {
-                'pendiente': 'bg-yellow-200',
-                'pagado': 'bg-blue-200', 
-                'enviado': 'bg-purple-200',
-                'entregado': 'bg-green-200',
-                'cancelado': 'bg-red-200'
-              };
-              
-              return (
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center space-x-3">
-                    <div class={`w-4 h-4 rounded ${colores[estado] || 'bg-gray-200'}`}></div>
-                    <span class="font-medium capitalize">{estado}</span>
-                  </div>
-                  <div class="text-right">
-                    <div class="font-bold">{cantidad}</div>
-                    <div class="text-sm text-gray-500">{porcentaje}%</div>
-                  </div>
-                </div>
-              );
-            })}
+      <!-- Header con filtros -->
+      <div class="mb-8">
+        <div class="sm:flex sm:items-center sm:justify-between">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900">📊 Reportes Avanzados</h1>
+            <p class="mt-2 text-gray-600">Análisis detallado de ventas, productos y clientes</p>
+          </div>
+          
+          <!-- Filtro de período -->
+          <div class="mt-4 sm:mt-0">
+            <select 
+              id="filtro-periodo" 
+              class="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onchange="window.location.href = '/admin/reportes?periodo=' + this.value"
+            >
+              <option value="7" selected={periodo === 7}>Últimos 7 días</option>
+              <option value="30" selected={periodo === 30}>Últimos 30 días</option>
+              <option value="90" selected={periodo === 90}>Últimos 90 días</option>
+              <option value="365" selected={periodo === 365}>Último año</option>
+            </select>
           </div>
         </div>
       </div>
 
-      <!-- Productos Más Vendidos -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">🏆 Top Productos (30 días)</h2>
+      <!-- Métricas principales -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white overflow-hidden shadow-lg rounded-lg border-l-4 border-blue-500">
+          <div class="p-6">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span class="text-blue-600 font-bold text-lg">💰</span>
+                </div>
+              </div>
+              <div class="ml-4 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Ingresos del Período</dt>
+                  <dd class="text-2xl font-bold text-gray-900">{formatPrice(ingresosPeriodo)}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="p-6">
+
+        <div class="bg-white overflow-hidden shadow-lg rounded-lg border-l-4 border-green-500">
+          <div class="p-6">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <span class="text-green-600 font-bold text-lg">📦</span>
+                </div>
+              </div>
+              <div class="ml-4 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Completados</dt>
+                  <dd class="text-2xl font-bold text-gray-900">{ventasPeriodo.length}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow-lg rounded-lg border-l-4 border-purple-500">
+          <div class="p-6">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                  <span class="text-purple-600 font-bold text-lg">👥</span>
+                </div>
+              </div>
+              <div class="ml-4 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Clientes Únicos</dt>
+                  <dd class="text-2xl font-bold text-gray-900">{estadisticasClientes.totalClientes}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow-lg rounded-lg border-l-4 border-orange-500">
+          <div class="p-6">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                  <span class="text-orange-600 font-bold text-lg">📈</span>
+                </div>
+              </div>
+              <div class="ml-4 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Ticket Promedio</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {formatPrice(ventasPeriodo.length > 0 ? ingresosPeriodo / ventasPeriodo.length : 0)}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Gráfico de ventas por día -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Ventas por Día</h3>
+          <div class="h-64">
+            <canvas id="ventasPorDiaChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfico de productos más vendidos -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">🏆 Productos Más Vendidos</h3>
+          <div class="h-64">
+            <canvas id="productosMasVendidosChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tablas detalladas -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Top productos -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">🎯 Top Productos</h3>
+          <div class="overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ventas</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ingresos</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {productosMasVendidos.slice(0, 10).map((producto, index) => (
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      #{index + 1}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        {producto.image_url && (
+                          <img class="h-8 w-8 rounded-full object-cover mr-3" src={producto.image_url} alt={producto.name} />
+                        )}
+                        <div class="text-sm font-medium text-gray-900">
+                          {producto.name?.substring(0, 30)}{producto.name?.length > 30 ? '...' : ''}
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {producto.ventas} unidades
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                      {formatPrice(producto.ingresos)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top clientes -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">👑 Top Clientes</h3>
           <div class="space-y-4">
-            {reportes.topProductos.map((producto: any, index: number) => (
+            {estadisticasClientes.topClientes.slice(0, 10).map((cliente, index) => (
               <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div class="flex items-center space-x-3">
-                  <div class="text-lg font-bold text-purple-600">#{index + 1}</div>
+                  <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span class="text-blue-600 font-bold text-sm">#{index + 1}</span>
+                    </div>
+                  </div>
                   <div>
-                    <div class="font-medium">{producto.title}</div>
-                    <div class="text-sm text-gray-500">{producto.cantidadVendida} unidades</div>
+                    <p class="text-sm font-medium text-gray-900">{cliente.email}</p>
+                    <p class="text-xs text-gray-500">{cliente.pedidos} pedidos</p>
                   </div>
                 </div>
                 <div class="text-right">
-                  <div class="font-bold">{formatPrice(producto.ingresoGenerado)}</div>
-                  <div class="text-sm text-gray-500">Ingresos</div>
+                  <p class="text-sm font-semibold text-gray-900">{formatPrice(cliente.total)}</p>
+                  <p class="text-xs text-gray-500">{formatDate(cliente.ultimaCompra)}</p>
                 </div>
               </div>
             ))}
@@ -255,124 +343,181 @@ const crecimientoMensual = calcularCrecimiento(reportes.ventasMes, reportes.vent
         </div>
       </div>
 
-      <!-- Clientes VIP -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">👑 Top Clientes (30 días)</h2>
+      <!-- Estadísticas adicionales -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">📈 Análisis de Clientes</h4>
+          <div class="space-y-3">
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Total de clientes:</span>
+              <span class="text-sm font-semibold text-gray-900">{estadisticasClientes.totalClientes}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Clientes recurrentes:</span>
+              <span class="text-sm font-semibold text-gray-900">{estadisticasClientes.clientesRecurrentes}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Tasa de retención:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {estadisticasClientes.totalClientes > 0 ? 
+                  Math.round((estadisticasClientes.clientesRecurrentes / estadisticasClientes.totalClientes) * 100) : 0}%
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Gasto promedio:</span>
+              <span class="text-sm font-semibold text-gray-900">{formatPrice(estadisticasClientes.promedioCompras)}</span>
+            </div>
+          </div>
         </div>
-        <div class="p-6">
-          <div class="space-y-4">
-            {reportes.topClientes.map((cliente: any, index: number) => (
-              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div class="flex items-center space-x-3">
-                  <div class="text-lg font-bold text-green-600">#{index + 1}</div>
-                  <div>
-                    <div class="font-medium">{cliente.nombre}</div>
-                    <div class="text-sm text-gray-500">{cliente.email}</div>
-                  </div>
-                </div>
-                <div class="text-right">
-                  <div class="font-bold">{formatPrice(cliente.totalCompras)}</div>
-                  <div class="text-sm text-gray-500">{cliente.numeroPedidos} pedidos</div>
-                </div>
-              </div>
-            ))}
+
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">📦 Resumen de Productos</h4>
+          <div class="space-y-3">
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Productos únicos vendidos:</span>
+              <span class="text-sm font-semibold text-gray-900">{productosMasVendidos.length}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Unidades totales:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {productosMasVendidos.reduce((sum, p) => sum + p.ventas, 0)}
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Producto más vendido:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {productosMasVendidos[0]?.name?.substring(0, 15) || 'N/A'}
+                {productosMasVendidos[0]?.name?.length > 15 ? '...' : ''}
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Ventas del top:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {productosMasVendidos[0]?.ventas || 0} unidades
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white shadow-lg rounded-lg p-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">📊 Métricas del Período</h4>
+          <div class="space-y-3">
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Período analizado:</span>
+              <span class="text-sm font-semibold text-gray-900">{periodo} días</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Ventas por día:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {periodo > 0 ? Math.round(ventasPeriodo.length / periodo * 10) / 10 : 0}
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Ingresos por día:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {formatPrice(periodo > 0 ? ingresosPeriodo / periodo : 0)}
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-sm text-gray-600">Mejor día:</span>
+              <span class="text-sm font-semibold text-gray-900">
+                {fechas.length > 0 ? 
+                  fechas.reduce((a, b) => ventasPorDia[a] > ventasPorDia[b] ? a : b).split('-').reverse().join('/') : 
+                  'N/A'
+                }
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Resumen Ejecutivo -->
-      <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow border">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">📋 Resumen Ejecutivo</h2>
-        </div>
-        <div class="p-6 space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="font-medium">Ticket Promedio:</span>
-            <span class="font-bold text-green-600">
-              {formatPrice(reportes.pedidosMes > 0 ? reportes.ventasMes / reportes.pedidosMes : 0)}
-            </span>
-          </div>
-          
-          <div class="flex justify-between items-center">
-            <span class="font-medium">Pedidos/Día Promedio:</span>
-            <span class="font-bold text-blue-600">
-              {Math.round(reportes.pedidosMes / 30)} pedidos
-            </span>
-          </div>
-          
-          <div class="flex justify-between items-center">
-            <span class="font-medium">Tasa de Conversión:</span>
-            <span class="font-bold text-purple-600">
-              {Math.round((reportes.estadosPedidos.entregado || 0) / (reportes.pedidosMes || 1) * 100)}%
-            </span>
-          </div>
-          
-          <hr class="border-gray-300">
-          
-          <div class="text-center">
-            <div class="text-2xl font-bold text-gray-800 mb-2">
-              Meta Mensual: {formatPrice(500000)} {/* Configurar meta */}
-            </div>
-            <div class="w-full bg-gray-200 rounded-full h-3">
-              <div 
-                class="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-300"
-                style={`width: ${Math.min((reportes.ventasMes / 500000) * 100, 100)}%`}
-              ></div>
-            </div>
-            <div class="text-sm text-gray-600 mt-2">
-              {Math.round((reportes.ventasMes / 500000) * 100)}% completado
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
-
-    <!-- Acciones de Reporte -->
-    <div class="bg-white rounded-lg shadow p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">📄 Exportar Reportes</h2>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors">
-          <div class="text-center">
-            <div class="text-2xl mb-2">📊</div>
-            <div class="font-medium text-gray-700">Reporte de Ventas</div>
-            <div class="text-sm text-gray-500">Excel/CSV</div>
-          </div>
-        </button>
-        
-        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors">
-          <div class="text-center">
-            <div class="text-2xl mb-2">📦</div>
-            <div class="font-medium text-gray-700">Reporte de Productos</div>
-            <div class="text-sm text-gray-500">PDF</div>
-          </div>
-        </button>
-        
-        <button class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors">
-          <div class="text-center">
-            <div class="text-2xl mb-2">👥</div>
-            <div class="font-medium text-gray-700">Reporte de Clientes</div>
-            <div class="text-sm text-gray-500">Excel/CSV</div>
-          </div>
-        </button>
-      </div>
-    </div>
-
   </div>
 
-  <script is:inline>
-    // Funciones para exportar reportes
-    function exportarVentas() {
-      alert('🚀 Funcionalidad de exportación en desarrollo...');
-    }
-    
-    function exportarProductos() {
-      alert('🚀 Funcionalidad de exportación en desarrollo...');
-    }
-    
-    function exportarClientes() {
-      alert('🚀 Funcionalidad de exportación en desarrollo...');
-    }
+  <!-- Scripts para gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script define:vars={{ chartDataReportes }}>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Gráfico de ventas por día
+      const ctxVentas = document.getElementById('ventasPorDiaChart').getContext('2d');
+      new Chart(ctxVentas, {
+        type: 'line',
+        data: {
+          labels: chartDataReportes.fechas,
+          datasets: [{
+            label: 'Ingresos por día',
+            data: chartDataReportes.ventas,
+            borderColor: '#3B82F6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return new Intl.NumberFormat('es-CO', {
+                    style: 'currency',
+                    currency: 'COP',
+                    minimumFractionDigits: 0
+                  }).format(value);
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return new Intl.NumberFormat('es-CO', {
+                    style: 'currency',
+                    currency: 'COP'
+                  }).format(context.parsed.y);
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Gráfico de productos más vendidos
+      const ctxProductos = document.getElementById('productosMasVendidosChart').getContext('2d');
+      new Chart(ctxProductos, {
+        type: 'bar',
+        data: {
+          labels: chartDataReportes.productos.map(p => p.nombre),
+          datasets: [{
+            label: 'Unidades vendidas',
+            data: chartDataReportes.productos.map(p => p.ventas),
+            backgroundColor: [
+              '#EF4444', '#F97316', '#EAB308', '#22C55E',
+              '#06B6D4', '#3B82F6', '#8B5CF6', '#EC4899'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    });
   </script>
 </DashboardLayout>
