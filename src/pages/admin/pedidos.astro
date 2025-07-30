@@ -1,6 +1,12 @@
 ---
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { supabase } from '../../lib/supabaseClient';
+import { 
+  obtenerConfigEstado, 
+  obtenerClaseColor, 
+  obtenerSiguientesEstados,
+  type EstadoPedido 
+} from '../../lib/estadosPedidos';
 
 // 📦 Obtener todos los pedidos con información completa
 let pedidos: any[] = [];
@@ -72,17 +78,13 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
-// Función para obtener el color del estado
+// Función para obtener el color del estado usando el sistema unificado
 function getStatusColor(status: string) {
-  const colors: Record<string, string> = {
-    'pendiente': 'bg-yellow-100 text-yellow-800',
-    'confirmado': 'bg-blue-100 text-blue-800',
-    'preparando': 'bg-orange-100 text-orange-800',
-    'enviado': 'bg-indigo-100 text-indigo-800',
-    'entregado': 'bg-green-100 text-green-800',
-    'cancelado': 'bg-red-100 text-red-800'
-  };
-  return colors[status] || 'bg-gray-100 text-gray-800';
+  try {
+    return obtenerClaseColor(status as EstadoPedido);
+  } catch {
+    return 'bg-gray-100 text-gray-800';
+  }
 }
 
 // Función para formatear método de pago
@@ -158,37 +160,94 @@ function formatMetodoPago(metodo: string) {
     )}
 
     <!-- Formulario para nuevo pedido (inicialmente oculto) -->
+        <!-- Formulario para nuevo pedido (inicialmente oculto) -->
     <div id="formNuevoPedido" class="hidden bg-white border-2 border-green-200 rounded-lg p-6">
-      <h2 class="text-lg font-semibold mb-4 text-green-800">📱 Nuevo Pedido de WhatsApp</h2>
-      
-      <form id="nuevoPedidoForm" class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700">Producto</label>
-          <select name="producto_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
-            <option value="">Seleccionar producto...</option>
-            {productos.map(producto => (
-              <option value={producto.id} data-price={producto.price}>
-                {producto.title} - {formatPrice(producto.price)} ({producto.sku})
-              </option>
-            ))}
-          </select>
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-semibold text-green-800">➕ Crear Nuevo Pedido (WhatsApp)</h3>
+        <button 
+          type="button" 
+          onclick="toggleNuevoPedido()" 
+          class="text-gray-500 hover:text-gray-700"
+        >
+          ✖️
+        </button>
+      </div>
+
+      <!-- Sección de productos (carrito) -->
+      <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+        <h4 class="text-lg font-semibold text-gray-800 mb-4">🛍️ Productos del Pedido</h4>
+        
+        <!-- Lista de productos agregados -->
+        <div id="productos-agregados" class="space-y-3 mb-4">
+          <!-- Los productos se agregarán aquí dinámicamente -->
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700">Cantidad</label>
-          <input 
-            type="number" 
-            name="cantidad" 
-            min="1" 
-            value="1" 
-            required 
-            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-            oninput="window.calcularTotal()"
-          >
+        <!-- Formulario para agregar producto -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-white rounded-lg border-2 border-dashed border-gray-300">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Producto</label>
+            <select 
+              id="producto-select"
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Seleccionar producto...</option>
+              {productos.map((p) => (
+                <option value={p.id} data-price={p.price} data-title={p.title}>
+                  {p.title} - ${p.price?.toLocaleString()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Cantidad</label>
+            <input 
+              id="cantidad-input"
+              type="number" 
+              min="1" 
+              value="1" 
+              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Subtotal</label>
+            <input 
+              id="subtotal-display"
+              type="text" 
+              readonly 
+              placeholder="$0"
+              class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
+            >
+          </div>
+
+          <div class="flex items-end">
+            <button 
+              type="button" 
+              id="agregar-producto-btn"
+              class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              ➕ Agregar
+            </button>
+          </div>
         </div>
 
+        <!-- Total del pedido -->
+        <div class="mt-4 p-3 bg-green-50 rounded-lg">
+          <div class="flex justify-between items-center">
+            <span class="text-lg font-semibold text-green-800">Total del Pedido:</span>
+            <span id="total-pedido" class="text-xl font-bold text-green-900">$0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Datos del cliente -->
+      <form id="nuevoPedidoForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input type="hidden" id="productos-data" name="productos_data" value="">
+        <input type="hidden" id="total-final" name="precio_total" value="0">
+
         <div>
-          <label class="block text-sm font-medium text-gray-700">Nombre del Cliente</label>
+          <label class="block text-sm font-medium text-gray-700">Nombre del Cliente *</label>
           <input 
             type="text" 
             name="cliente_nombre" 
@@ -198,7 +257,7 @@ function formatMetodoPago(metodo: string) {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700">Teléfono</label>
+          <label class="block text-sm font-medium text-gray-700">Teléfono *</label>
           <input 
             type="tel" 
             name="cliente_telefono" 
@@ -218,17 +277,18 @@ function formatMetodoPago(metodo: string) {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700">Total</label>
+          <label class="block text-sm font-medium text-gray-700">Total (calculado)</label>
           <input 
-            type="number" 
-            name="precio_total" 
+            type="text" 
+            id="total-readonly"
             readonly 
+            placeholder="$0"
             class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
           >
         </div>
 
         <div class="col-span-2">
-          <label class="block text-sm font-medium text-gray-700">Dirección de Envío</label>
+          <label class="block text-sm font-medium text-gray-700">Dirección de Envío *</label>
           <textarea 
             name="direccion_envio" 
             required 
@@ -252,7 +312,7 @@ function formatMetodoPago(metodo: string) {
             type="submit" 
             class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors"
           >
-            ✅ Crear Pedido
+            ✅ Crear Pedido Completo
           </button>
           <button 
             type="button" 
@@ -382,52 +442,233 @@ function formatMetodoPago(metodo: string) {
   </div>
 
   <script>
+    // 🌍 DECLARAR TIPOS PARA WINDOW
+    declare global {
+      interface Window {
+        toggleNuevoPedido: () => void;
+        calcularTotal: () => void;
+        actualizarEstado: (id: string, estadoActual: string) => void;
+        eliminarPedido: (id: string) => Promise<void>;
+      }
+    }
+
     // 🌍 FUNCIONES GLOBALES (asignadas a window para acceso desde onclick)
     
+    // Array para almacenar los productos del pedido
+    let productosDelPedido: Array<{
+      id: string;
+      title: string;
+      precio: number;
+      cantidad: number;
+      subtotal: number;
+    }> = [];
+
     // Mostrar/ocultar formulario de nuevo pedido
-    window.toggleNuevoPedido = function() {
-      console.log('🔄 Ejecutando toggleNuevoPedido');
+    (window as any).toggleNuevoPedido = () => {
       const form = document.getElementById('formNuevoPedido');
       if (form) {
-        form.classList.toggle('hidden');
-        
-        if (!form.classList.contains('hidden')) {
-          // Resetear formulario cuando se abre
-          const formElement = document.getElementById('nuevoPedidoForm');
-          if (formElement) {
-            formElement.reset();
-          }
+        const isHidden = form.classList.contains('hidden');
+        if (isHidden) {
+          form.classList.remove('hidden');
+          // Limpiar productos al abrir
+          productosDelPedido = [];
+          actualizarVistaProductos();
+          actualizarTotal();
+        } else {
+          form.classList.add('hidden');
+          // Limpiar formulario al cerrar
+          const formulario = document.getElementById('nuevoPedidoForm') as HTMLFormElement;
+          if (formulario) formulario.reset();
+          productosDelPedido = [];
         }
-      } else {
-        console.error('❌ No se encontró formNuevoPedido');
       }
     };
 
-    // Calcular total automáticamente
-    window.calcularTotal = function() {
-      console.log('🧮 Calculando total');
-      const productoSelect = document.querySelector('select[name="producto_id"]');
-      const cantidadInput = document.querySelector('input[name="cantidad"]');
-      const totalInput = document.querySelector('input[name="precio_total"]');
+    // Función para calcular subtotal del producto seleccionado
+    (window as any).calcularSubtotal = () => {
+      const productoSelect = document.getElementById('producto-select') as HTMLSelectElement;
+      const cantidadInput = document.getElementById('cantidad-input') as HTMLInputElement;
+      const subtotalDisplay = document.getElementById('subtotal-display') as HTMLInputElement;
       
-      if (productoSelect && cantidadInput && totalInput) {
+      if (productoSelect && cantidadInput && subtotalDisplay) {
         const selectedOption = productoSelect.options[productoSelect.selectedIndex];
         const precio = parseFloat(selectedOption.dataset.price || '0') || 0;
         const cantidad = parseInt(cantidadInput.value) || 0;
+        const subtotal = precio * cantidad;
         
-        totalInput.value = (precio * cantidad).toString();
-        console.log('💰 Total calculado:', precio * cantidad);
+        subtotalDisplay.value = subtotal > 0 ? `$${subtotal.toLocaleString()}` : '$0';
       }
     };
 
-    // Función para actualizar estado
-    window.actualizarEstado = function(id, estadoActual) {
-      console.log('🔄 Actualizando estado para:', id);
-      const nuevosEstados = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado'];
-      const estadoSeleccionado = prompt(`Estado actual: ${estadoActual}\n\nSelecciona nuevo estado:\n1. pendiente\n2. confirmado\n3. preparando\n4. enviado\n5. entregado\n6. cancelado\n\nEscribe el número:`);
+    // Función para agregar producto al pedido
+    (window as any).agregarProducto = () => {
+      const productoSelect = document.getElementById('producto-select') as HTMLSelectElement;
+      const cantidadInput = document.getElementById('cantidad-input') as HTMLInputElement;
       
-      if (estadoSeleccionado && estadoSeleccionado >= '1' && estadoSeleccionado <= '6') {
-        const nuevoEstado = nuevosEstados[parseInt(estadoSeleccionado) - 1];
+      if (!productoSelect.value) {
+        alert('❌ Por favor selecciona un producto');
+        return;
+      }
+      
+      const cantidad = parseInt(cantidadInput.value) || 0;
+      if (cantidad <= 0) {
+        alert('❌ La cantidad debe ser mayor a 0');
+        return;
+      }
+
+      const selectedOption = productoSelect.options[productoSelect.selectedIndex];
+      const productoId = selectedOption.value;
+      const titulo = selectedOption.dataset.title || selectedOption.text;
+      const precio = parseFloat(selectedOption.dataset.price || '0') || 0;
+      const subtotal = precio * cantidad;
+
+      // Verificar si el producto ya está en el pedido
+      const productoExistente = productosDelPedido.find(p => p.id === productoId);
+      
+      if (productoExistente) {
+        // Si existe, actualizar cantidad
+        productoExistente.cantidad += cantidad;
+        productoExistente.subtotal = productoExistente.precio * productoExistente.cantidad;
+      } else {
+        // Si no existe, agregar nuevo
+        productosDelPedido.push({
+          id: productoId,
+          title: titulo,
+          precio: precio,
+          cantidad: cantidad,
+          subtotal: subtotal
+        });
+      }
+
+      // Limpiar selección
+      productoSelect.value = '';
+      cantidadInput.value = '1';
+      (document.getElementById('subtotal-display') as HTMLInputElement).value = '$0';
+
+      // Actualizar vista
+      actualizarVistaProductos();
+      actualizarTotal();
+      
+      console.log('✅ Producto agregado:', productosDelPedido);
+    };
+
+    // Función para eliminar producto del pedido
+    (window as any).eliminarProducto = (index: number) => {
+      if (confirm('¿Eliminar este producto del pedido?')) {
+        productosDelPedido.splice(index, 1);
+        actualizarVistaProductos();
+        actualizarTotal();
+      }
+    };
+
+    // Función para actualizar la vista de productos agregados
+    function actualizarVistaProductos() {
+      const container = document.getElementById('productos-agregados');
+      if (!container) return;
+
+      if (productosDelPedido.length === 0) {
+        container.innerHTML = '<div class="text-gray-500 text-center py-4">No hay productos agregados</div>';
+        return;
+      }
+
+      container.innerHTML = productosDelPedido.map((producto, index) => `
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200" data-product-index="${index}">
+          <div class="flex-1">
+            <h5 class="font-medium text-gray-900">${producto.title}</h5>
+            <p class="text-sm text-gray-600">
+              $${producto.precio.toLocaleString()} x ${producto.cantidad} = 
+              <span class="font-semibold">$${producto.subtotal.toLocaleString()}</span>
+            </p>
+          </div>
+          <button 
+            class="eliminar-producto-btn text-red-600 hover:text-red-800 ml-4"
+            title="Eliminar producto"
+            data-index="${index}"
+          >
+            🗑️
+          </button>
+        </div>
+      `).join('');
+
+      // Agregar event listeners a los botones de eliminar
+      const eliminarBtns = container.querySelectorAll('.eliminar-producto-btn');
+      eliminarBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt((e.target as HTMLElement).getAttribute('data-index') || '0');
+          (window as any).eliminarProducto(index);
+        });
+      });
+    }
+
+    // Función para actualizar el total del pedido
+    function actualizarTotal() {
+      const total = productosDelPedido.reduce((sum, producto) => sum + producto.subtotal, 0);
+      
+      const totalPedidoElement = document.getElementById('total-pedido');
+      const totalReadonlyElement = document.getElementById('total-readonly') as HTMLInputElement;
+      const totalFinalElement = document.getElementById('total-final') as HTMLInputElement;
+      const productosDataElement = document.getElementById('productos-data') as HTMLInputElement;
+      
+      if (totalPedidoElement) {
+        totalPedidoElement.textContent = `$${total.toLocaleString()}`;
+      }
+      
+      if (totalReadonlyElement) {
+        totalReadonlyElement.value = `$${total.toLocaleString()}`;
+      }
+      
+      if (totalFinalElement) {
+        totalFinalElement.value = total.toString();
+      }
+      
+      if (productosDataElement) {
+        productosDataElement.value = JSON.stringify(productosDelPedido);
+      }
+    }    // Función para actualizar estado usando el sistema unificado
+    window.actualizarEstado = async function(id: string, estadoActual: string) {
+      console.log('🔄 Actualizando estado para:', id);
+      
+      try {
+        // Obtener estados siguientes permitidos
+        const response = await fetch('/api/pedidos/get-next-states', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId: id })
+        });
+        
+        if (!response.ok) {
+          // Fallback a lista estática si la API falla
+          const estadosPermitidos = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'devuelto'];
+          mostrarSelectorEstado(id, estadoActual, estadosPermitidos);
+          return;
+        }
+        
+        const data = await response.json();
+        mostrarSelectorEstado(id, estadoActual, data.siguientesEstados || []);
+        
+      } catch (error) {
+        console.error('Error obteniendo estados:', error);
+        // Fallback
+        const estadosPermitidos = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado', 'devuelto'];
+        mostrarSelectorEstado(id, estadoActual, estadosPermitidos);
+      }
+    };
+
+    // Función auxiliar para mostrar el selector de estado
+    function mostrarSelectorEstado(id: string, estadoActual: string, estadosPermitidos: string[]) {
+      let mensaje = `Estado actual: ${estadoActual}\n\nSelecciona nuevo estado:\n`;
+      estadosPermitidos.forEach((estado, index) => {
+        mensaje += `${index + 1}. ${estado}\n`;
+      });
+      mensaje += '\nEscribe el número:';
+      
+      const estadoSeleccionado = prompt(mensaje);
+      
+      if (estadoSeleccionado && 
+          parseInt(estadoSeleccionado) >= 1 && 
+          parseInt(estadoSeleccionado) <= estadosPermitidos.length) {
+        
+        const nuevoEstado = estadosPermitidos[parseInt(estadoSeleccionado) - 1];
         
         console.log('🚀 Enviando actualización:', { id, status: nuevoEstado });
         
@@ -454,7 +695,7 @@ function formatMetodoPago(metodo: string) {
     };
 
     // Función para eliminar pedido
-    window.eliminarPedido = async function(id) {
+    window.eliminarPedido = async function(id: string) {
       console.log('🗑️ Eliminando pedido:', id);
       if (!confirm('¿Estás seguro de eliminar este pedido?')) return;
 
@@ -483,37 +724,61 @@ function formatMetodoPago(metodo: string) {
     // 🚀 Event listeners cuando el DOM esté listo
     document.addEventListener('DOMContentLoaded', function() {
       console.log('🚀 DOM cargado, inicializando eventos...');
-      
-      // Event listener para cambio de producto
-      const productoSelect = document.querySelector('select[name="producto_id"]');
+
+      // Agregar event listeners para cálculo de subtotal
+      const productoSelect = document.getElementById('producto-select') as HTMLSelectElement;
+      const cantidadInput = document.getElementById('cantidad-input') as HTMLInputElement;
+      const agregarBtn = document.getElementById('agregar-producto-btn') as HTMLButtonElement;
+
       if (productoSelect) {
-        productoSelect.addEventListener('change', window.calcularTotal);
-        console.log('✅ Event listener agregado al select de productos');
-      } else {
-        console.error('❌ No se encontró el select de productos');
+        productoSelect.addEventListener('change', (window as any).calcularSubtotal);
+      }
+
+      if (cantidadInput) {
+        cantidadInput.addEventListener('input', (window as any).calcularSubtotal);
+      }
+
+      if (agregarBtn) {
+        agregarBtn.addEventListener('click', (window as any).agregarProducto);
       }
 
       // Manejar envío del formulario
-      const form = document.getElementById('nuevoPedidoForm');
+      const form = document.getElementById('nuevoPedidoForm') as HTMLFormElement;
       if (form) {
         console.log('✅ Formulario encontrado, agregando event listener');
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           console.log('📝 Formulario enviado');
           
-          const formData = new FormData(e.target);
-          const data = Object.fromEntries(formData.entries());
-          
-          console.log('📋 Datos del formulario:', data);
-          
-          // Validar datos
-          if (!data.producto_id || !data.cliente_nombre || !data.cliente_telefono) {
-            alert('Por favor completa todos los campos obligatorios');
+          // Validar que hay productos agregados
+          if (productosDelPedido.length === 0) {
+            alert('❌ Debes agregar al menos un producto al pedido');
             return;
           }
 
+          const formData = new FormData(e.target as HTMLFormElement);
+          const data = Object.fromEntries(formData.entries());
+          
+          console.log('📋 Datos del formulario:', data);
+          console.log('🛍️ Productos del pedido:', productosDelPedido);
+          
+          // Validar datos básicos
+          if (!data.cliente_nombre || !data.cliente_telefono || !data.direccion_envio) {
+            alert('❌ Por favor completa todos los campos obligatorios');
+            return;
+          }
+
+          // Calcular total real
+          const totalCalculado = productosDelPedido.reduce((sum, producto) => sum + producto.subtotal, 0);
+
           const payload = {
-            ...data,
+            productos_data: productosDelPedido,
+            cliente_nombre: data.cliente_nombre,
+            cliente_telefono: data.cliente_telefono,
+            cliente_email: data.cliente_email || null,
+            direccion_envio: data.direccion_envio,
+            precio_total: totalCalculado,
+            notas_admin: data.notas_admin || null,
             metodo_pago: 'whatsapp',
             status: 'pendiente'
           };
@@ -532,7 +797,11 @@ function formatMetodoPago(metodo: string) {
             console.log('📄 Resultado:', result);
 
             if (response.ok) {
-              alert(`✅ Pedido creado exitosamente!\nNúmero de seguimiento: ${result.numero_seguimiento}`);
+              const mensaje = productosDelPedido.length === 1 
+                ? `✅ Pedido creado exitosamente!\nNúmero de seguimiento: ${result.numero_seguimiento_principal}` 
+                : `✅ ${result.total_pedidos} pedidos relacionados creados exitosamente!\nNúmero de seguimiento principal: ${result.numero_seguimiento_principal}\nProductos: ${result.productos_resumen}`;
+              
+              alert(mensaje);
               location.reload();
             } else {
               alert(`❌ Error: ${result.error}`);

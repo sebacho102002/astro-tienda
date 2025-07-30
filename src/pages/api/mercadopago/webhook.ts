@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../../lib/supabaseClient';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+import { mapearEstadoMercadoPago, obtenerConfigEstado } from '../../../lib/estadosPedidos';
 
 // Configurar MercadoPago
 const client = new MercadoPagoConfig({
@@ -31,9 +32,12 @@ export const POST: APIRoute = async ({ request }) => {
         
         console.log('💰 Información del pago:', JSON.stringify(paymentInfo, null, 2));
 
-        // Actualizar el pedido en la base de datos
+        // Actualizar el pedido en la base de datos usando el sistema unificado
         const externalReference = paymentInfo.external_reference;
-        const status = mapMercadoPagoStatus(paymentInfo.status || '');
+        const status = mapearEstadoMercadoPago(paymentInfo.status || '');
+        const configEstado = obtenerConfigEstado(status);
+        
+        console.log(`🔄 Mapeando estado de MercadoPago "${paymentInfo.status}" a "${status}" (${configEstado.cliente})`);
         
         if (externalReference) {
           const { data: updateResult, error: updateError } = await supabase
@@ -46,6 +50,7 @@ export const POST: APIRoute = async ({ request }) => {
               payment_type: paymentInfo.payment_type_id,
               transaction_amount: paymentInfo.transaction_amount,
               fecha_pago: paymentInfo.date_approved || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
               payment_data: JSON.stringify(paymentInfo)
             })
             .eq('external_reference', externalReference)
@@ -56,11 +61,26 @@ export const POST: APIRoute = async ({ request }) => {
           } else {
             console.log('✅ Pedido actualizado:', updateResult);
             
+            // Agregar entrada al historial
+            if (updateResult && updateResult.length > 0) {
+              const pedido = updateResult[0];
+              await supabase
+                .from('pedidos_historial')
+                .insert({
+                  pedido_id: pedido.id,
+                  estado_anterior: 'pendiente', // Asumimos que viene de pendiente
+                  estado_nuevo: status,
+                  observaciones: `Pago procesado por MercadoPago: ${configEstado.descripcion}. ID de pago: ${paymentId}`,
+                  usuario_actualizo: 'MercadoPago'
+                });
+            }
+            
             // Si el pago fue aprobado, actualizar el stock del producto
-            if (status === 'pagado' && updateResult.length > 0) {
+            if (status === 'confirmado' && updateResult.length > 0) {
               const pedido = updateResult[0];
               if (pedido.producto_id && pedido.cantidad) {
                 await updateProductStock(pedido.producto_id, pedido.cantidad);
+                console.log(`📦 Stock actualizado para producto ${pedido.producto_id}`);
               }
             }
           }
@@ -103,23 +123,6 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 };
-
-// Función para mapear status de MercadoPago a nuestro sistema
-function mapMercadoPagoStatus(mpStatus: string): string {
-  switch (mpStatus) {
-    case 'approved':
-      return 'pagado';
-    case 'pending':
-      return 'pendiente';
-    case 'in_process':
-      return 'procesando';
-    case 'rejected':
-    case 'cancelled':
-      return 'cancelado';
-    default:
-      return 'pendiente';
-  }
-}
 
 // Función para actualizar stock del producto
 async function updateProductStock(productId: string, quantity: number) {

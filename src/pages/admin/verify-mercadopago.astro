@@ -102,6 +102,11 @@ export const prerender = false;
         const statusDiv = document.getElementById('verification-status');
         const resultsDiv = document.getElementById('results');
         
+        if (!statusDiv || !resultsDiv) {
+          console.error('❌ No se encontraron los elementos necesarios');
+          return;
+        }
+
         // Mostrar loading
         statusDiv.innerHTML = `
           <div class="bg-blue-500 text-white p-4 rounded-lg">
@@ -131,41 +136,50 @@ export const prerender = false;
             `;
 
             // Mostrar detalles
-            document.getElementById('general-status').innerHTML = `
-              <div class="flex items-center text-green-600">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-                <span>Credenciales configuradas correctamente</span>
-              </div>
-              <div class="flex items-center text-green-600">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-                <span>Conexión con MercadoPago exitosa</span>
-              </div>
-              <div class="flex items-center text-green-600">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-                <span>Entorno: ${data.details.environment}</span>
-              </div>
-            `;
+            const generalStatusEl = document.getElementById('general-status');
+            if (generalStatusEl) {
+              generalStatusEl.innerHTML = `
+                <div class="flex items-center text-green-600">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Credenciales configuradas correctamente</span>
+                </div>
+                <div class="flex items-center text-green-600">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Conexión con MercadoPago exitosa</span>
+                </div>
+                <div class="flex items-center text-green-600">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span>Entorno: ${data.details.environment}</span>
+                </div>
+              `;
+            }
 
-            document.getElementById('technical-details').innerHTML = `
-              <div><strong>Preference ID:</strong> ${data.details.preferenceId}</div>
-              <div><strong>Timestamp:</strong> ${new Date(data.details.timestamp).toLocaleString()}</div>
-              <div><strong>Public Key:</strong> ${data.details.publicKey}</div>
-            `;
+            const technicalDetailsEl = document.getElementById('technical-details');
+            if (technicalDetailsEl) {
+              technicalDetailsEl.innerHTML = `
+                <div><strong>Preference ID:</strong> ${data.details.preferenceId}</div>
+                <div><strong>Timestamp:</strong> ${new Date(data.details.timestamp).toLocaleString()}</div>
+                <div><strong>Public Key:</strong> ${data.details.publicKey}</div>
+              `;
+            }
 
-            document.getElementById('checkout-test').innerHTML = `
-              <p class="text-green-600 mb-4">✅ Las credenciales son válidas. Puedes probar el checkout:</p>
-              <a href="${data.details.checkoutUrl}" target="_blank" 
-                 class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg inline-block">
-                🧪 Probar Checkout de Prueba
-              </a>
-              <p class="text-xs text-gray-500 mt-2">Se abrirá en una nueva pestaña</p>
-            `;
+            const checkoutTestEl = document.getElementById('checkout-test');
+            if (checkoutTestEl) {
+              checkoutTestEl.innerHTML = `
+                <p class="text-green-600 mb-4">✅ Las credenciales son válidas. Puedes probar el checkout:</p>
+                <a href="${data.details.checkoutUrl}" target="_blank" 
+                   class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg inline-block">
+                  🧪 Probar Checkout de Prueba
+                </a>
+                <p class="text-xs text-gray-500 mt-2">Se abrirá en una nueva pestaña</p>
+              `;
+            }
 
           } else {
             // Error
@@ -180,20 +194,24 @@ export const prerender = false;
               </div>
             `;
 
-            document.getElementById('general-status').innerHTML = `
-              <div class="text-red-600">❌ ${data.error}</div>
-              <div class="text-gray-600">${data.details}</div>
-            `;
+            const generalStatusEl = document.getElementById('general-status');
+            if (generalStatusEl) {
+              generalStatusEl.innerHTML = `
+                <div class="text-red-600">❌ ${data.error}</div>
+                <div class="text-gray-600">${data.details}</div>
+              `;
+            }
           }
 
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
           statusDiv.innerHTML = `
             <div class="bg-red-500 text-white p-4 rounded-lg">
               <div class="flex items-center">
                 <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
-                <span>❌ Error de conexión: ${error.message}</span>
+                <span>❌ Error de conexión: ${errorMessage}</span>
               </div>
             </div>
           `;

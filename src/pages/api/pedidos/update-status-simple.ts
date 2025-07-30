@@ -1,5 +1,11 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../../../lib/supabaseClient';
+import { 
+  esEstadoValido, 
+  puedeTransicionarA, 
+  obtenerConfigEstado,
+  type EstadoPedido 
+} from '../../../lib/estadosPedidos';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -15,13 +21,45 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // Validar estados permitidos
-    const estadosValidos = ['pendiente', 'confirmado', 'preparando', 'enviado', 'entregado', 'cancelado'];
-    if (!estadosValidos.includes(status)) {
+    // Validar que el estado es válido usando el sistema unificado
+    if (!esEstadoValido(status)) {
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'Estado no válido' 
+          error: `Estado no válido: ${status}. Estados permitidos: pendiente, confirmado, preparando, enviado, entregado, cancelado, devuelto` 
+        }), 
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Obtener el estado actual del pedido para validar la transición
+    const { data: pedidoActual, error: errorPedido } = await supabase
+      .from('pedidos')
+      .select('status')
+      .eq('id', id)
+      .single();
+
+    if (errorPedido || !pedidoActual) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'Pedido no encontrado' 
+        }), 
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const estadoActual = pedidoActual.status as EstadoPedido;
+
+    // Validar que la transición es permitida
+    if (estadoActual !== status && !puedeTransicionarA(estadoActual, status as EstadoPedido)) {
+      const configActual = obtenerConfigEstado(estadoActual);
+      const estadosPermitidos = configActual.siguientesEstados.join(', ');
+      
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: `Transición no permitida de "${estadoActual}" a "${status}". Estados permitidos: ${estadosPermitidos}` 
         }), 
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
@@ -50,11 +88,24 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
+    // Agregar entrada al historial de cambios
+    const configEstado = obtenerConfigEstado(status as EstadoPedido);
+    await supabase
+      .from('pedidos_historial')
+      .insert({
+        pedido_id: id,
+        estado_anterior: estadoActual,
+        estado_nuevo: status,
+        observaciones: `Estado actualizado automáticamente: ${configEstado.descripcion}`,
+        usuario_actualizo: 'Sistema'
+      });
+
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: `Estado actualizado a: ${status}`,
-        pedido: data
+        message: `Estado actualizado a: ${configEstado.cliente}`,
+        pedido: data,
+        configuracion: configEstado
       }), 
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );

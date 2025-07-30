@@ -239,7 +239,15 @@ class ShoppingCart {
         window.location.href = result.init_point;
       } else {
         console.error('Error creando preferencia:', result);
-        alert('Error procesando el pago. Por favor intenta nuevamente.');
+        
+        // Manejo especial para credenciales inválidas
+        if (result.code === 'INVALID_CREDENTIALS') {
+          alert(`🔑 ${result.error}\n\n${result.details}`);
+        } else if (result.code === 'INVALID_ACCESS_TOKEN') {
+          alert(`🔑 ${result.error}\n\n${result.details}`);
+        } else {
+          alert(`Error procesando el pago: ${result.error || 'Error desconocido'}\n\n${result.details || 'Por favor intenta nuevamente.'}`);
+        }
       }
 
     } catch (error) {

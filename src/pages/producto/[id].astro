@@ -218,7 +218,14 @@ function formatPrice(price: number) {
             if (data.success && data.init_point) {
               window.location.href = data.init_point;
             } else {
-              alert('Error: ' + (data.details || data.error || 'Error desconocido'));
+              // Manejo especial para credenciales inválidas
+              if (data.code === 'INVALID_CREDENTIALS') {
+                alert(`🔑 ${data.error}\n\n${data.details}`);
+              } else if (data.code === 'INVALID_ACCESS_TOKEN') {
+                alert(`🔑 ${data.error}\n\n${data.details}`);
+              } else {
+                alert(`Error procesando el pago: ${data.error || 'Error desconocido'}\n\n${data.details || 'Por favor intenta nuevamente.'}`);
+              }
             }
           } catch (error) {
             alert('Error de conexión');

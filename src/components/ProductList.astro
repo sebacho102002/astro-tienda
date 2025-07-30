@@ -6,7 +6,11 @@ const { data: productos, error } = await supabase
   .select("*")
   .order("created_at", { ascending: false });
 
+// Obtener categorías únicas para el filtro
+const categorias = productos ? [...new Set(productos.map(p => p.category).filter(Boolean))] : [];
+
 console.log("🔍 Productos cargados:", productos?.length || 0);
+console.log("🏷️ Categorías disponibles:", categorias);
 if (error) {
   console.error("❌ Error cargando productos:", error);
 }
@@ -16,36 +20,254 @@ if (error) {
 
 <section id="productos" class="py-16 bg-gray-100">
   <div class="container mx-auto px-6">
-    <h2 class="text-3xl font-bold text-center mb-12 text-gray-800">Nuestros Productos</h2>
+    <h2 class="text-3xl font-bold text-center mb-8 text-gray-800">Nuestros Productos</h2>
     
-    {productos && productos.length > 0 ? (
-      <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {productos.map((p) => (
-          <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-300">
-            <img 
-              src={p.images?.[0] || "/placeholder.jpg"} 
-              alt={p.title} 
-              class="h-48 w-full object-cover rounded-lg mb-4" 
+    <!-- Filtros y Búsqueda -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+      <div class="flex flex-col lg:flex-row gap-4 items-center justify-between">
+        
+        <!-- Buscador -->
+        <div class="w-full lg:flex-1 lg:max-w-md">
+          <div class="relative">
+            <input 
+              type="text" 
+              id="search-input"
+              placeholder="Buscar productos..." 
+              class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
             />
-            <h3 class="text-xl font-semibold mb-2 text-gray-800">{p.title}</h3>
-            <p class="text-purple-600 font-bold text-xl mb-2">${p.price}</p>
-            <p class="text-gray-600 text-sm mb-4 line-clamp-2">{p.description}</p>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-500">Stock: {p.stock}</span>
-              <a 
-                href={`/producto/${p.id}`} 
-                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition duration-300"
-              >
-                Ver más
-              </a>
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+            </div>
+            <!-- Indicador de búsqueda activa -->
+            <div id="search-indicator" class="absolute inset-y-0 right-0 pr-3 items-center pointer-events-none hidden">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
             </div>
           </div>
-        ))}
+        </div>
+
+        <!-- Filtros en una fila en móvil -->
+        <div class="w-full lg:w-auto flex flex-col sm:flex-row gap-3 items-center">
+          <!-- Filtro por Categoría -->
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <label for="category-filter" class="text-sm font-medium text-gray-700 whitespace-nowrap">Categoría:</label>
+            <select 
+              id="category-filter"
+              class="flex-1 sm:flex-none border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map(categoria => (
+                <option value={categoria}>{categoria}</option>
+              ))}
+            </select>
+          </div>
+
+          <!-- Botón limpiar filtros -->
+          <button 
+            id="clear-filters"
+            class="w-full sm:w-auto px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-300 whitespace-nowrap"
+          >
+            🗑️ Limpiar filtros
+          </button>
+        </div>
       </div>
-    ) : (
-      <div class="text-center py-12">
-        <p class="text-gray-600 text-lg">No hay productos disponibles en este momento.</p>
+
+      <!-- Contador de resultados -->
+      <div id="results-counter" class="mt-4 text-sm text-gray-600 text-center hidden">
+        <span id="results-count">0</span> producto(s) encontrado(s)
       </div>
-    )}
+    </div>
+    
+    <!-- Productos -->
+    <div id="products-container">
+      {productos && productos.length > 0 ? (
+        <div id="products-grid" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {productos.map((p) => (
+            <div 
+              class="product-card bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition duration-300"
+              data-title={p.title.toLowerCase()}
+              data-description={p.description.toLowerCase()}
+              data-category={p.category || ''}
+            >
+              <img 
+                src={p.images?.[0] || "/placeholder.jpg"} 
+                alt={p.title} 
+                class="h-48 w-full object-cover rounded-lg mb-4" 
+              />
+              <h3 class="text-xl font-semibold mb-2 text-gray-800">{p.title}</h3>
+              <p class="text-purple-600 font-bold text-xl mb-2">${p.price}</p>
+              <p class="text-gray-600 text-sm mb-4 line-clamp-2">{p.description}</p>
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col">
+                  <span class="text-sm text-gray-500">Stock: {p.stock}</span>
+                  {p.category && <span class="text-xs text-purple-500 font-medium">{p.category}</span>}
+                </div>
+                <a 
+                  href={`/producto/${p.id}`} 
+                  class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition duration-300"
+                >
+                  Ver más
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div class="text-center py-12">
+          <p class="text-gray-600 text-lg">No hay productos disponibles en este momento.</p>
+        </div>
+      )}
+      
+      <!-- Mensaje cuando no hay resultados de búsqueda -->
+      <div id="no-results" class="text-center py-12 hidden">
+        <p class="text-gray-600 text-lg">No se encontraron productos que coincidan con tu búsqueda.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+  const clearFilters = document.getElementById('clear-filters') as HTMLButtonElement;
+  const productCards = document.querySelectorAll('.product-card') as NodeListOf<HTMLElement>;
+  const searchIndicator = document.getElementById('search-indicator') as HTMLElement;
+  const resultsCounter = document.getElementById('results-counter') as HTMLElement;
+  const resultsCount = document.getElementById('results-count') as HTMLElement;
+  
+  let searchTimeout: NodeJS.Timeout;
+
+  function showSearchIndicator() {
+    searchIndicator.classList.remove('hidden');
+    searchIndicator.classList.add('flex');
+  }
+
+  function hideSearchIndicator() {
+    searchIndicator.classList.add('hidden');
+    searchIndicator.classList.remove('flex');
+  }
+
+  function updateResultsCounter(count: number) {
+    resultsCount.textContent = count.toString();
+    if (searchInput.value.trim() || categoryFilter.value) {
+      resultsCounter.classList.remove('hidden');
+    } else {
+      resultsCounter.classList.add('hidden');
+    }
+  }
+
+  function normalizeText(text: string): string {
+    return text.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "");
+  }
+
+  function filterProducts() {
+    const searchTerm = normalizeText(searchInput.value.trim());
+    const selectedCategory = categoryFilter.value.toLowerCase();
+    let visibleCount = 0;
+
+    productCards.forEach((card) => {
+      const productTitle = normalizeText(card.getAttribute('data-title') || '');
+      const productDescription = normalizeText(card.getAttribute('data-description') || '');
+      const productCategory = (card.getAttribute('data-category') || '').toLowerCase();
+      
+      // Verificar coincidencia de búsqueda en título y descripción
+      const matchesSearch = !searchTerm || 
+        productTitle.includes(searchTerm) ||
+        productDescription.includes(searchTerm) ||
+        productTitle.split(' ').some(word => word.startsWith(searchTerm)) ||
+        productDescription.split(' ').some(word => word.startsWith(searchTerm));
+      
+      // Verificar coincidencia de categoría
+      const matchesCategory = !selectedCategory || productCategory === selectedCategory;
+      
+      const shouldShow = matchesSearch && matchesCategory;
+      
+      if (shouldShow) {
+        card.style.display = 'block';
+        card.style.opacity = '0';
+        setTimeout(() => {
+          if (card.style.display !== 'none') {
+            card.style.opacity = '1';
+          }
+        }, visibleCount * 50); // Animación escalonada
+        visibleCount++;
+      } else {
+        card.style.opacity = '0';
+        setTimeout(() => {
+          card.style.display = 'none';
+        }, 200);
+      }
+    });
+
+    updateResultsCounter(visibleCount);
+    
+    // Mostrar mensaje si no hay resultados
+    const noResultsMessage = document.getElementById('no-results-message');
+    if (visibleCount === 0 && (searchTerm || selectedCategory)) {
+      if (!noResultsMessage) {
+        const message = document.createElement('div');
+        message.id = 'no-results-message';
+        message.className = 'col-span-full text-center py-8 text-gray-500';
+        message.innerHTML = `
+          <div class="text-6xl mb-4">🔍</div>
+          <h3 class="text-xl font-semibold mb-2">No se encontraron productos</h3>
+          <p>Intenta con otros términos de búsqueda o categoría</p>
+        `;
+        document.getElementById('products-grid')?.appendChild(message);
+      }
+    } else if (noResultsMessage) {
+      noResultsMessage.remove();
+    }
+  }
+
+  // Event listeners con debounce para búsqueda
+  searchInput.addEventListener('input', function() {
+    showSearchIndicator();
+    
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      filterProducts();
+      hideSearchIndicator();
+    }, 300);
+  });
+
+  // Filtro de categoría instantáneo
+  categoryFilter.addEventListener('change', filterProducts);
+
+  // Limpiar filtros
+  clearFilters.addEventListener('click', function() {
+    searchInput.value = '';
+    categoryFilter.value = '';
+    
+    productCards.forEach((card) => {
+      card.style.display = 'block';
+      card.style.opacity = '1';
+    });
+    
+    updateResultsCounter(productCards.length);
+    
+    const noResultsMessage = document.getElementById('no-results-message');
+    if (noResultsMessage) {
+      noResultsMessage.remove();
+    }
+    
+    // Enfocar el campo de búsqueda
+    searchInput.focus();
+  });
+
+  // Agregar transiciones CSS suaves
+  productCards.forEach(card => {
+    card.style.transition = 'opacity 0.3s ease-in-out';
+  });
+
+  // Inicializar contador
+  updateResultsCounter(productCards.length);
+});
+</script>
   </div>
 </section>

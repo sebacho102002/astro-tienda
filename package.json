@@ -13,6 +13,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@astrojs/check": "^0.9.4",
     "@astrojs/node": "^9.3.0",
     "@astrojs/tailwind": "^6.0.2",
     "@supabase/supabase-js": "^2.52.0",
@@ -27,6 +28,7 @@
     "jspdf-autotable": "^5.0.2",
     "mercadopago": "^2.8.0",
     "papaparse": "^5.5.3",
+    "typescript": "^5.8.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
