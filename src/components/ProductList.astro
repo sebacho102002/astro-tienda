@@ -90,11 +90,18 @@ if (error) {
               data-description={p.description.toLowerCase()}
               data-category={p.category || ''}
             >
-              <img 
-                src={p.images?.[0] || "/placeholder.jpg"} 
-                alt={p.title} 
-                class="h-48 w-full object-cover rounded-lg mb-4" 
-              />
+              <div class="relative">
+                <img 
+                  src={p.images?.[0] || "/placeholder.jpg"} 
+                  alt={p.title} 
+                  class="h-48 w-full object-cover rounded-lg mb-4" 
+                />
+                {p.images && p.images.length > 1 && (
+                  <div class="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
+                    📷 {p.images.length}
+                  </div>
+                )}
+              </div>
               <h3 class="text-xl font-semibold mb-2 text-gray-800">{p.title}</h3>
               <p class="text-purple-600 font-bold text-xl mb-2">${p.price}</p>
               <p class="text-gray-600 text-sm mb-4 line-clamp-2">{p.description}</p>
