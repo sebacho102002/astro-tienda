@@ -196,21 +196,26 @@ function formatPrice(price: number) {
     
     <!-- Script específico para galería de imágenes -->
     <script is:inline define:vars={{ productImages: product.images || [] }}>
-      // 🖼️ Funcionalidad de galería de imágenes
+      // 🖼️ FUNCIONALIDAD DE GALERÍA DE IMÁGENES
+      console.log('🚀 Script de galería iniciado');
+      console.log('� Imágenes del producto:', productImages);
+      
       let currentImageIndex = 0;
-
-      console.log('🖼️ Inicializando galería con imágenes:', productImages);
 
       // Función para cambiar imagen
       function changeImage(direction) {
-        console.log('🖼️ changeImage llamado con dirección:', direction);
-        console.log('📷 Imágenes disponibles:', productImages.length);
+        console.log('===== CHANGE IMAGE =====');
+        console.log('� Función changeImage llamada con:', direction);
+        console.log('� Estado actual - índice:', currentImageIndex);
+        console.log('📚 Total de imágenes:', productImages.length);
         
-        if (productImages.length <= 1) {
-          console.log('⚠️ Solo hay una imagen, no se puede navegar');
+        if (!productImages || productImages.length <= 1) {
+          console.log('⚠️ No hay suficientes imágenes para navegar');
           return;
         }
         
+        // Calcular nuevo índice
+        const oldIndex = currentImageIndex;
         currentImageIndex += direction;
         
         if (currentImageIndex >= productImages.length) {
@@ -219,62 +224,103 @@ function formatPrice(price: number) {
           currentImageIndex = productImages.length - 1;
         }
         
-        console.log('🔄 Cambiando a imagen índice:', currentImageIndex);
+        console.log('🔄 Cambiando de índice', oldIndex, 'a', currentImageIndex);
+        console.log('🖼️ Nueva imagen será:', productImages[currentImageIndex]);
+        
         updateImageDisplay();
       }
 
       // Función para ir a una imagen específica
       function goToImage(index) {
-        console.log('🎯 goToImage llamado con índice:', index);
+        console.log('===== GO TO IMAGE =====');
+        console.log('🎯 Función goToImage llamada con índice:', index);
+        
         if (index >= 0 && index < productImages.length) {
           currentImageIndex = index;
+          console.log('✅ Índice válido, cambiando a:', currentImageIndex);
           updateImageDisplay();
+        } else {
+          console.log('❌ Índice inválido:', index);
         }
       }
 
       // Actualizar la visualización de la imagen
       function updateImageDisplay() {
-        console.log('🔄 updateImageDisplay - índice actual:', currentImageIndex);
+        console.log('===== UPDATE DISPLAY =====');
+        console.log('🔄 Actualizando display, índice actual:', currentImageIndex);
+        
         const mainImage = document.getElementById('main-image');
-        if (mainImage && productImages[currentImageIndex]) {
-          mainImage.src = productImages[currentImageIndex];
-          console.log('✅ Imagen actualizada a:', productImages[currentImageIndex]);
-          
-          // Actualizar indicadores
-          const indicators = document.querySelectorAll('[data-index]');
-          console.log('🔘 Encontrados indicadores:', indicators.length);
-          indicators.forEach((indicator, index) => {
-            if (index === currentImageIndex) {
-              indicator.classList.remove('bg-opacity-50');
-              indicator.classList.add('bg-opacity-100');
-            } else {
-              indicator.classList.remove('bg-opacity-100');
-              indicator.classList.add('bg-opacity-50');
-            }
-          });
-          
-          // Actualizar miniaturas
-          const thumbnails = document.querySelectorAll('[data-thumbnail]');
-          console.log('🖼️ Encontradas miniaturas:', thumbnails.length);
-          thumbnails.forEach((thumbnail, index) => {
-            if (index === currentImageIndex) {
-              thumbnail.classList.add('border-purple-500');
-              thumbnail.classList.remove('border-transparent');
-            } else {
-              thumbnail.classList.remove('border-purple-500');
-              thumbnail.classList.add('border-transparent');
-            }
-          });
+        console.log('🖼️ Elemento main-image:', mainImage);
+        
+        if (!mainImage) {
+          console.error('❌ No se encontró el elemento main-image');
+          return;
         }
+        
+        if (!productImages[currentImageIndex]) {
+          console.error('❌ No hay imagen en el índice:', currentImageIndex);
+          return;
+        }
+        
+        const newImageUrl = productImages[currentImageIndex];
+        console.log('📸 Cambiando imagen de:', mainImage.src);
+        console.log('📸 Cambiando imagen a:', newImageUrl);
+        
+        mainImage.src = newImageUrl;
+        
+        console.log('✅ Imagen actualizada. Nuevo src:', mainImage.src);
+        
+        // Actualizar indicadores
+        updateIndicators();
+        
+        // Actualizar miniaturas
+        updateThumbnails();
+      }
+      
+      function updateIndicators() {
+        const indicators = document.querySelectorAll('[data-index]');
+        console.log('🔘 Actualizando', indicators.length, 'indicadores');
+        
+        indicators.forEach((indicator, index) => {
+          if (index === currentImageIndex) {
+            indicator.classList.remove('bg-opacity-50');
+            indicator.classList.add('bg-opacity-100');
+          } else {
+            indicator.classList.remove('bg-opacity-100');
+            indicator.classList.add('bg-opacity-50');
+          }
+        });
+      }
+      
+      function updateThumbnails() {
+        const thumbnails = document.querySelectorAll('[data-thumbnail]');
+        console.log('🖼️ Actualizando', thumbnails.length, 'miniaturas');
+        
+        thumbnails.forEach((thumbnail, index) => {
+          if (index === currentImageIndex) {
+            thumbnail.classList.add('border-purple-500');
+            thumbnail.classList.remove('border-transparent');
+          } else {
+            thumbnail.classList.remove('border-purple-500');
+            thumbnail.classList.add('border-transparent');
+          }
+        });
       }
 
-      // Hacer funciones globales para que funcionen desde onclick
-      window.changeImage = changeImage;
-      window.goToImage = goToImage;
+      // Hacer funciones globales
+      window.changeImage = function(direction) {
+        console.log('🌍 Window.changeImage llamada con:', direction);
+        changeImage(direction);
+      };
+      
+      window.goToImage = function(index) {
+        console.log('🌍 Window.goToImage llamada con:', index);
+        goToImage(index);
+      };
 
       // Navegación con teclado
       document.addEventListener('keydown', function(e) {
-        if (productImages.length > 1) {
+        if (productImages && productImages.length > 1) {
           if (e.key === 'ArrowLeft') {
             console.log('⌨️ Flecha izquierda presionada');
             changeImage(-1);
@@ -285,8 +331,31 @@ function formatPrice(price: number) {
         }
       });
 
-      console.log('🖼️ Galería inicializada exitosamente');
-      console.log('🔧 Funciones globales disponibles: changeImage, goToImage');
+      // Test inicial
+      console.log('🧪 Probando funciones...');
+      console.log('� window.changeImage:', typeof window.changeImage);
+      console.log('🔧 window.goToImage:', typeof window.goToImage);
+      
+      // Verificar que el DOM esté listo
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          console.log('📄 DOM cargado, verificando elementos...');
+          const mainImage = document.getElementById('main-image');
+          console.log('�️ main-image encontrado:', !!mainImage);
+          if (mainImage) {
+            console.log('📸 Src actual:', mainImage.src);
+          }
+        });
+      } else {
+        console.log('📄 DOM ya está listo');
+        const mainImage = document.getElementById('main-image');
+        console.log('🖼️ main-image encontrado:', !!mainImage);
+        if (mainImage) {
+          console.log('📸 Src actual:', mainImage.src);
+        }
+      }
+      
+      console.log('✅ Script de galería completamente inicializado');
     </script>
     
     <script type="module" define:vars={{ 
