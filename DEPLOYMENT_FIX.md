@@ -6,9 +6,9 @@ El proyecto ahora está configurado para funcionar correctamente tanto en **loca
 
 ### 🔧 Cambios Realizados:
 
-1. **astro.config.mjs**: Configuración limpia sin restricciones de host
-2. **render.yaml**: Comando de inicio con variables de entorno explícitas
-3. **package.json**: Script de inicio actualizado
+1. **astro.config.mjs**: Configuración explícita de host y puerto en el server config
+2. **render.yaml**: Comando de inicio simplificado, deja que Astro maneje HOST/PORT
+3. **package.json**: Script de inicio simplificado
 
 ### 📝 Scripts Disponibles:
 
@@ -41,11 +41,11 @@ PORT=10000
 npm run build
 
 # 2. Probar como en producción
-HOST=0.0.0.0 PORT=3000 node ./dist/server/entry.mjs
+HOST=0.0.0.0 PORT=3000 npm run start
 
 # 3. Verificar que muestra:
-# "Server listening on local: http://localhost:3000"
-# "network: http://[tu-ip]:3000"
+# "local: http://localhost:3000"
+# "network: http://[tu-ip]:3000"  ← Esto es clave para acceso externo
 ```
 
 ### 🚀 Deployment en Render:
@@ -68,12 +68,12 @@ El log ahora debería mostrar:
 ```
 [@astrojs/node] Server listening on 
   local: http://localhost:10000
-  network: http://0.0.0.0:10000
+  network: http://0.0.0.0:10000  ← Esto permite acceso externo
 ```
 
 En lugar de solo:
 ```
-[@astrojs/node] Server listening on http://localhost:10000
+[@astrojs/node] Server listening on http://localhost:10000  ← Solo local
 ```
 
 ## ✅ ESTADO: LISTO PARA DEPLOYMENT

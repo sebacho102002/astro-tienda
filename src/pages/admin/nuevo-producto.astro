@@ -275,26 +275,93 @@ if (Astro.request.method === "POST") {
               <div class="border-b border-gray-200 pb-8">
                 <h3 class="text-xl font-semibold text-gray-800 mb-6">🖼️ Imágenes del Producto</h3>
                 <p class="text-sm text-gray-600 mb-6">
-                  Agrega hasta 5 imágenes usando URLs. La primera imagen será la principal.
+                  Agrega hasta 5 imágenes usando URLs o subiendo archivos. La primera imagen será la principal.
                 </p>
                 
-                <div class="space-y-4">
+                <div class="space-y-6">
                   {Array.from({ length: 5 }, (_, i) => (
-                    <div class="flex items-center space-x-4">
-                      <div class="flex-1">
-                        <input 
-                          type="url" 
-                          name={`image_${i + 1}`} 
-                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                          placeholder={`URL de imagen ${i + 1}${i === 0 ? ' (principal)' : ''}`}
-                          onchange={`previewImage(this, 'preview_${i + 1}')`}
-                        />
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                      <h4 class="font-medium text-gray-700 mb-3">
+                        Imagen {i + 1}{i === 0 ? ' (Principal)' : ''}
+                      </h4>
+                      
+                      <!-- Tabs para URL o Archivo -->
+                      <div class="mb-4">
+                        <div class="flex space-x-1 bg-gray-200 p-1 rounded-lg w-fit">
+                          <button 
+                            type="button"
+                            class="tab-btn px-3 py-1 rounded-md text-sm font-medium transition-colors active"
+                            onclick={`switchTab(${i + 1}, 'url')`}
+                            id={`tab-url-${i + 1}`}
+                          >
+                            📝 URL
+                          </button>
+                          <button 
+                            type="button"
+                            class="tab-btn px-3 py-1 rounded-md text-sm font-medium transition-colors"
+                            onclick={`switchTab(${i + 1}, 'file')`}
+                            id={`tab-file-${i + 1}`}
+                          >
+                            📁 Archivo
+                          </button>
+                        </div>
                       </div>
-                      <div 
-                        id={`preview_${i + 1}`} 
-                        class="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm overflow-hidden"
-                      >
-                        📷
+
+                      <!-- Content URL -->
+                      <div id={`content-url-${i + 1}`} class="tab-content">
+                        <div class="flex items-center space-x-4">
+                          <div class="flex-1">
+                            <input 
+                              type="url" 
+                              name={`image_${i + 1}`} 
+                              id={`image_${i + 1}`}
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                              placeholder={`URL de imagen ${i + 1}`}
+                              onchange={`previewImage(this, 'preview_${i + 1}')`}
+                            />
+                          </div>
+                          <div 
+                            id={`preview_${i + 1}`} 
+                            class="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm overflow-hidden bg-white"
+                          >
+                            📷
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Content Archivo -->
+                      <div id={`content-file-${i + 1}`} class="tab-content hidden">
+                        <div class="flex items-center space-x-4">
+                          <div class="flex-1">
+                            <div class="relative">
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                class="hidden"
+                                id={`file_${i + 1}`}
+                                onchange={`handleFileUpload(${i + 1})`}
+                              />
+                              <label 
+                                for={`file_${i + 1}`}
+                                class="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-purple-500 transition-colors flex items-center justify-center text-gray-600 hover:text-purple-600"
+                              >
+                                <span id={`file-label-${i + 1}`}>📁 Seleccionar imagen...</span>
+                              </label>
+                              <div id={`upload-progress-${i + 1}`} class="hidden mt-2">
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                  <div class="bg-purple-600 h-2 rounded-full transition-all duration-300" style="width: 0%" id={`progress-bar-${i + 1}`}></div>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">Subiendo...</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div 
+                            id={`preview_file_${i + 1}`} 
+                            class="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm overflow-hidden bg-white"
+                          >
+                            📷
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -433,6 +500,163 @@ if (Astro.request.method === "POST") {
           config.classList.add('hidden');
         }
       }
+
+      function switchTab(imageIndex, type) {
+        // Update tab buttons
+        const urlTab = document.getElementById(`tab-url-${imageIndex}`);
+        const fileTab = document.getElementById(`tab-file-${imageIndex}`);
+        const urlContent = document.getElementById(`content-url-${imageIndex}`);
+        const fileContent = document.getElementById(`content-file-${imageIndex}`);
+
+        if (type === 'url') {
+          urlTab.classList.add('active', 'bg-white', 'text-purple-700');
+          urlTab.classList.remove('text-gray-600');
+          fileTab.classList.remove('active', 'bg-white', 'text-purple-700');
+          fileTab.classList.add('text-gray-600');
+          
+          urlContent.classList.remove('hidden');
+          fileContent.classList.add('hidden');
+          
+          // Clear file input and preview
+          const fileInput = document.getElementById(`file_${imageIndex}`);
+          const filePreview = document.getElementById(`preview_file_${imageIndex}`);
+          fileInput.value = '';
+          filePreview.innerHTML = '📷';
+          
+          // Clear the main URL input when switching to file tab
+          const urlInput = document.getElementById(`image_${imageIndex}`);
+          if (urlInput.dataset.fromFile) {
+            urlInput.value = '';
+            urlInput.removeAttribute('data-from-file');
+          }
+        } else {
+          fileTab.classList.add('active', 'bg-white', 'text-purple-700');
+          fileTab.classList.remove('text-gray-600');
+          urlTab.classList.remove('active', 'bg-white', 'text-purple-700');
+          urlTab.classList.add('text-gray-600');
+          
+          fileContent.classList.remove('hidden');
+          urlContent.classList.add('hidden');
+          
+          // Clear URL input and preview
+          const urlInput = document.getElementById(`image_${imageIndex}`);
+          const urlPreview = document.getElementById(`preview_${imageIndex}`);
+          if (!urlInput.dataset.fromFile) {
+            urlInput.value = '';
+          }
+          urlPreview.innerHTML = '📷';
+        }
+      }
+
+      async function handleFileUpload(imageIndex) {
+        const fileInput = document.getElementById(`file_${imageIndex}`);
+        const file = fileInput.files[0];
+        
+        if (!file) return;
+
+        // Validate file type
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) {
+          alert('Solo se permiten archivos de imagen (JPEG, PNG, WebP, GIF)');
+          fileInput.value = '';
+          return;
+        }
+
+        // Validate file size (5MB)
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+          alert('El archivo es demasiado grande. Máximo 5MB permitido.');
+          fileInput.value = '';
+          return;
+        }
+
+        // Update UI
+        const label = document.getElementById(`file-label-${imageIndex}`);
+        const progress = document.getElementById(`upload-progress-${imageIndex}`);
+        const progressBar = document.getElementById(`progress-bar-${imageIndex}`);
+        const preview = document.getElementById(`preview_file_${imageIndex}`);
+
+        label.textContent = file.name;
+        progress.classList.remove('hidden');
+        progressBar.style.width = '20%';
+
+        // Create preview immediately
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          preview.innerHTML = `<img src="${e.target.result}" alt="Preview" class="w-full h-full object-cover" />`;
+        };
+        reader.readAsDataURL(file);
+
+        // Upload file
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          progressBar.style.width = '50%';
+
+          const response = await fetch('/api/upload/image', {
+            method: 'POST',
+            body: formData
+          });
+
+          progressBar.style.width = '80%';
+
+          const result = await response.json();
+
+          if (result.success) {
+            progressBar.style.width = '100%';
+            
+            // Set the URL in the hidden URL input
+            const urlInput = document.getElementById(`image_${imageIndex}`);
+            urlInput.value = result.url;
+            urlInput.dataset.fromFile = 'true';
+            
+            setTimeout(() => {
+              progress.classList.add('hidden');
+              progressBar.style.width = '0%';
+            }, 1000);
+
+            console.log('✅ Imagen subida exitosamente:', result.url);
+          } else {
+            throw new Error(result.error || 'Error desconocido');
+          }
+        } catch (error) {
+          console.error('❌ Error subiendo archivo:', error);
+          alert(`Error subiendo archivo: ${error.message}`);
+          
+          // Reset UI
+          fileInput.value = '';
+          label.textContent = '📁 Seleccionar imagen...';
+          progress.classList.add('hidden');
+          progressBar.style.width = '0%';
+          preview.innerHTML = '📷';
+        }
+      }
+
+      // Initialize tabs
+      document.addEventListener('DOMContentLoaded', function() {
+        // Set initial active state for all URL tabs
+        for (let i = 1; i <= 5; i++) {
+          const urlTab = document.getElementById(`tab-url-${i}`);
+          if (urlTab) {
+            urlTab.classList.add('active', 'bg-white', 'text-purple-700');
+          }
+        }
+
+        // Add CSS for active tabs
+        const style = document.createElement('style');
+        style.textContent = `
+          .tab-btn.active {
+            background-color: white;
+            color: #7c3aed;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+          }
+          .tab-btn:not(.active) {
+            color: #6b7280;
+          }
+        `;
+        document.head.appendChild(style);
+      });
     </script>
   </body>
 </html>
