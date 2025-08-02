@@ -4,9 +4,11 @@ services:
     env: node
     plan: free
     buildCommand: npm ci && npm run build
-    startCommand: node ./dist/server/entry.mjs
+    startCommand: HOST=0.0.0.0 PORT=10000 node ./dist/server/entry.mjs
     envVars:
       - key: NODE_VERSION
         value: 18
       - key: NPM_CONFIG_PRODUCTION
         value: false
+      - key: NODE_ENV
+        value: production
