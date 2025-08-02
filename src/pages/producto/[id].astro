@@ -194,6 +194,101 @@ function formatPrice(price: number) {
     <!-- Script principal -->
     <script src="/cart.js" type="module"></script>
     
+    <!-- Script específico para galería de imágenes -->
+    <script is:inline define:vars={{ productImages: product.images || [] }}>
+      // 🖼️ Funcionalidad de galería de imágenes
+      let currentImageIndex = 0;
+
+      console.log('🖼️ Inicializando galería con imágenes:', productImages);
+
+      // Función para cambiar imagen
+      function changeImage(direction) {
+        console.log('🖼️ changeImage llamado con dirección:', direction);
+        console.log('📷 Imágenes disponibles:', productImages.length);
+        
+        if (productImages.length <= 1) {
+          console.log('⚠️ Solo hay una imagen, no se puede navegar');
+          return;
+        }
+        
+        currentImageIndex += direction;
+        
+        if (currentImageIndex >= productImages.length) {
+          currentImageIndex = 0;
+        } else if (currentImageIndex < 0) {
+          currentImageIndex = productImages.length - 1;
+        }
+        
+        console.log('🔄 Cambiando a imagen índice:', currentImageIndex);
+        updateImageDisplay();
+      }
+
+      // Función para ir a una imagen específica
+      function goToImage(index) {
+        console.log('🎯 goToImage llamado con índice:', index);
+        if (index >= 0 && index < productImages.length) {
+          currentImageIndex = index;
+          updateImageDisplay();
+        }
+      }
+
+      // Actualizar la visualización de la imagen
+      function updateImageDisplay() {
+        console.log('🔄 updateImageDisplay - índice actual:', currentImageIndex);
+        const mainImage = document.getElementById('main-image');
+        if (mainImage && productImages[currentImageIndex]) {
+          mainImage.src = productImages[currentImageIndex];
+          console.log('✅ Imagen actualizada a:', productImages[currentImageIndex]);
+          
+          // Actualizar indicadores
+          const indicators = document.querySelectorAll('[data-index]');
+          console.log('🔘 Encontrados indicadores:', indicators.length);
+          indicators.forEach((indicator, index) => {
+            if (index === currentImageIndex) {
+              indicator.classList.remove('bg-opacity-50');
+              indicator.classList.add('bg-opacity-100');
+            } else {
+              indicator.classList.remove('bg-opacity-100');
+              indicator.classList.add('bg-opacity-50');
+            }
+          });
+          
+          // Actualizar miniaturas
+          const thumbnails = document.querySelectorAll('[data-thumbnail]');
+          console.log('🖼️ Encontradas miniaturas:', thumbnails.length);
+          thumbnails.forEach((thumbnail, index) => {
+            if (index === currentImageIndex) {
+              thumbnail.classList.add('border-purple-500');
+              thumbnail.classList.remove('border-transparent');
+            } else {
+              thumbnail.classList.remove('border-purple-500');
+              thumbnail.classList.add('border-transparent');
+            }
+          });
+        }
+      }
+
+      // Hacer funciones globales para que funcionen desde onclick
+      window.changeImage = changeImage;
+      window.goToImage = goToImage;
+
+      // Navegación con teclado
+      document.addEventListener('keydown', function(e) {
+        if (productImages.length > 1) {
+          if (e.key === 'ArrowLeft') {
+            console.log('⌨️ Flecha izquierda presionada');
+            changeImage(-1);
+          } else if (e.key === 'ArrowRight') {
+            console.log('⌨️ Flecha derecha presionada');
+            changeImage(1);
+          }
+        }
+      });
+
+      console.log('🖼️ Galería inicializada exitosamente');
+      console.log('🔧 Funciones globales disponibles: changeImage, goToImage');
+    </script>
+    
     <script type="module" define:vars={{ 
       productId: product.id, 
       productTitle: product.title, 
